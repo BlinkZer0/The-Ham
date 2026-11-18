@@ -6,11 +6,14 @@
 // Hosts the HTML/SVG UI (vst/ui, compiled in as BinaryData) in a WebView2 and
 // bridges it to the processor:
 //   UI -> C++ events : uiReady, setParam{id,value}, gesture{id,begin},
-//                      noteOn{manual,key,vel}, noteOff{manual,key}, panic,
+//                      noteOn{manual,key,vel}, noteOff{manual,key}, panic, expression{value},
+//                      setRegistration{manual,key,bars}, midiLearn{id}, midiForget{id}, learnCancel, cabinetModel{model},
 //                      loadPreset{id}, savePreset{name,overwrite}, deletePreset{id},
 //                      loadPresetFile, openPresetFolder, paramMenu{id,x,y}
 //   C++ -> UI events : params{id:value...}, notes{on:[[manual,key]...],off:[...]},
-//                      stats{peak,sustain,modWheel,expression,motor},
+//                      stats{peak,sustain,modWheel,expression,motor,perc},
+//                      registrations{upper[9],lower[9]}, learn{armed,map{id:cc}},
+//                      rotor{hornAngle,drumAngle,hornHz,drumHz} (turns, Hz; every tick while moving),
 //                      config{...}, presetList{presets[],folder}, preset{id,name,category},
 //                      saveResult{ok,exists,name,error}, message{text}
 class TheHamEditor : public juce::AudioProcessorEditor, private juce::Timer
@@ -34,6 +37,8 @@ private:
     void sendConfig();
     void sendPresetList();
     void sendPreset();
+    void sendRegistrations();
+    void sendLearn();
     void sendMessage (const juce::String& text);
     void chooseAndLoadPresetFile();
     void showParamMenu (const juce::var&);
@@ -43,7 +48,8 @@ private:
     std::array<float, ham::kNumParams> lastSent {};
     std::array<bool, ham::kNumParams> inGesture {};
     std::array<uint64_t, 3> lastKeys {};
-    int lastPresetVersion = -1;
+    std::array<float, 4> lastRotor { -1.0f, -1.0f, -1.0f, -1.0f };
+    int lastPresetVersion = -1, lastRegVersion = -1, lastLearnVersion = -1;
     int ticks = 0;
     bool uiReady = false;
     std::unique_ptr<juce::FileChooser> fileChooser;

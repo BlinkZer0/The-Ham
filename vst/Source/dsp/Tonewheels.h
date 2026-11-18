@@ -52,6 +52,21 @@ inline double wheelThird (int w)
     return 0.0;
 }
 
+// Leakage partner: the wheel that shares a compartment (magnet / pickup chamber) with w.
+// The two wheels on a shaft assembly are four octaves apart: 1-36 <-> 49-84, and the 192-tooth
+// wheels 85-91 pair with 42-48; 37-41 have no partner. Source: setBfree src/tonegen.c (wheelPairs).
+inline int wheelPartner (int w)
+{
+    if (w >= 1 && w <= 36) return w + 48;
+    if (w >= 49 && w <= 84) return w - 48;
+    if (w >= 42 && w <= 48) return w + 43;
+    if (w >= 85 && w <= 91) return w - 43;
+    return 0;
+}
+
+// Age: the upper wheels carry filter capacitors, which also tame the harmonics wear adds.
+inline double wheelHarmonicRoom (int w) { return w <= 43 ? 1.0 : std::max (0.0, 1.0 - (w - 43) / 20.0); }
+
 // Mains: a 60 Hz organ on 50 Hz mains runs its synchronous motor (and so every wheel)
 // at 5/6 speed: about 3.16 semitones flat.
 inline double mainsRatio (int mainsChoice) { return mainsChoice == 1 ? 50.0 / 60.0 : 1.0; }

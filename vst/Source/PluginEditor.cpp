@@ -89,6 +89,28 @@ juce::WebBrowserComponent::Options TheHamEditor::makeBrowserOptions()
             processor.uiKey (juce::jlimit (0, 2, (int) e["manual"]), juce::jlimit (0, 60, (int) e["key"]), 0);
         })
         .withEventListener ("panic", [this] (const juce::var&) { processor.requestPanic(); })
+        .withEventListener ("expression", [this] (const juce::var& e) { processor.setUiExpression ((float) (double) e["value"]); })
+        // fixed preset-key registrations: { manual: 0 / 1, key: 0..8 (C#..A), bars: "00 5320 000" }
+        .withEventListener ("setRegistration", [this] (const juce::var& e)
+        {
+            std::array<int, kNumFootages> bars {};
+            if (parseRegistration (e["bars"].toString(), bars))
+                processor.setRegistration ((int) e["manual"], (int) e["key"], bars);
+        })
+        // MIDI learn: arm a parameter (the next CC moved is assigned to it), forget it, or cancel
+        .withEventListener ("midiLearn", [this] (const juce::var& e)
+        {
+            const int i = indexForId (e["id"].toString());
+            if (i >= 0) processor.armLearn (i);
+        })
+        .withEventListener ("midiForget", [this] (const juce::var& e)
+        {
+            const int i = indexForId (e["id"].toString());
+            if (i >= 0) processor.forgetLearn (i);
+        })
+        .withEventListener ("learnCancel", [this] (const juce::var&) { processor.cancelLearn(); })
+        // a cabinet picked in the UI loads its defaults (speeds, ramps, rotors, baffle, crossover, mics)
+        .withEventListener ("cabinetModel", [this] (const juce::var& e) { processor.applyCabinetModel ((int) e["model"]); })
         .withEventListener ("loadPreset", [this] (const juce::var& e)
         {
             juce::String error;
@@ -172,6 +194,30 @@ void TheHamEditor::showParamMenu (const juce::var& e)
                      });
 }
 
+void TheHamEditor::sendRegistrations()
+{
+    lastRegVersion = processor.registrationsVersion.load();
+    const auto r = processor.registrations();
+    juce::Array<juce::var> up, lo;
+    for (int k = 0; k < 9; ++k)
+    {
+        up.add (registrationString (r[0][(size_t) k]));
+        lo.add (registrationString (r[1][(size_t) k]));
+    }
+    browser.emitEventIfBrowserIsVisible ("registrations", makeObject ({ { "upper", up }, { "lower", lo } }));
+}
+
+void TheHamEditor::sendLearn()
+{
+    lastLearnVersion = processor.learnVersion.load();
+    auto* map = new juce::DynamicObject();
+    for (int i = 0; i < kNumParams; ++i)
+        if (const int cc = processor.learnedCC (i); cc >= 0) map->setProperty (paramDefs()[(size_t) i].id, cc);
+    const int armed = processor.armedParam();
+    browser.emitEventIfBrowserIsVisible ("learn", makeObject ({
+        { "armed", armed >= 0 ? juce::var (paramDefs()[(size_t) armed].id) : juce::var ("") }, { "map", juce::var (map) } }));
+}
+
 void TheHamEditor::sendMessage (const juce::String& text)
 {
     browser.emitEventIfBrowserIsVisible ("message", makeObject ({ { "text", text } }));
@@ -246,9 +292,12 @@ void TheHamEditor::onUiReady()
     uiReady = true;
     lastSent.fill (std::numeric_limits<float>::quiet_NaN()); // force a full resend
     lastKeys.fill (0);
+    lastRotor.fill (-1.0f);
     sendConfig();
     sendPresetList();
     sendPreset();
+    sendRegistrations();
+    sendLearn();
     timerCallback();
 }
 
@@ -310,6 +359,10 @@ void TheHamEditor::timerCallback()
     // Preset changed outside the UI (host program change, project reload)
     if (processor.presetVersion.load() != lastPresetVersion)
         sendPreset();
+    if (processor.registrationsVersion.load() != lastRegVersion)
+        sendRegistrations();
+    if (processor.learnVersion.load() != lastLearnVersion)
+        sendLearn();
 
     // Autoload: pick up preset files added/removed/edited in the preset folder (every ~2 s)
     if (++ticks % 60 == 0 && processor.presetManager.rescanIfChanged())
@@ -329,11 +382,25 @@ void TheHamEditor::timerCallback()
     if (! on.isEmpty() || ! off.isEmpty())
         browser.emitEventIfBrowserIsVisible ("notes", makeObject ({ { "on", on }, { "off", off } }));
 
+    // rotors, for the cabinet drawing (every tick while they move: the UI interpolates between events)
+    {
+        const float h = processor.statHornTurns.load(), d = processor.statDrumTurns.load();
+        const float hz = processor.statHornHz.load(), dz = processor.statDrumHz.load();
+        if (h != lastRotor[0] || d != lastRotor[1] || hz != lastRotor[2] || dz != lastRotor[3])
+        {
+            lastRotor = { h, d, hz, dz };
+            browser.emitEventIfBrowserIsVisible ("rotor", makeObject ({ { "hornAngle", h }, { "drumAngle", d },
+                                                                         { "hornHz", hz }, { "drumHz", dz } }));
+        }
+    }
+
     browser.emitEventIfBrowserIsVisible ("stats", makeObject ({
         { "peak",       processor.statPeak.exchange (0.0f) },
         { "sustain",    processor.statSustain.load() },
         { "modWheel",   processor.statModWheel.load() },
         { "expression", processor.statExpression.load() },
         { "motor",      processor.statMotor.load() },
+        { "perc",       processor.statPerc.load() },
+        { "speed",      processor.statSpeed.load() },
     }));
 }

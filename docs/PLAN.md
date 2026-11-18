@@ -1,6 +1,166 @@
 # The Ham: build plan
 
-Status (2026-11-18): plan approved. **Phase 1 done** (skeleton + tonewheel core); waiting for hand-testing before phase 2.
+Status (2026-11-18): plan approved. **Phases 1–3 done** (tonewheel core, organ voice, rotary cabinets); waiting for
+hand-testing before phase 4.
+
+Phase 3 notes:
+- **Signal chain after the preamp:** overdrive → wah → tape echo → tube amp → crossover → horn and drum rotors → mics
+  → spring reverb → width. The analog stages (amp, overdrive, the echo's saturation) work at a calibrated level,
+  `kStage` = 0.06 per full drawbar on one key, so a single 8' note reaches the amp near −24 dBFS and a full-organ
+  chord drives it into breakup. Without that they would have seen raw busbar levels and clipped all the time.
+- **Rotor motion** is in the engine. The speed follows `dω/dt = (target − ω)/τ`, and τ is derived from the parameters
+  so that **Accel / Brake = the time from one speed to within 2% of the other**. Measured: horn Slow→Fast within 2%
+  after 1.001 s (Accel 1.0), drum 4.000 s (4.0); Fast→Slow 1.501 s (Brake 1.5) and 5.000 s (5.0). The horn leads;
+  1.5 s into a brake the drum is still at 1.6 Hz while the horn is at 0.8. Steady speeds are exact. A freshly loaded
+  cabinet starts at its speed (no spin-up).
+  - Speed sources: the Speed switch (when it changes), the mod wheel (Half Moon switches on crossing the middle;
+    Momentary is Fast while up), the Speed CC (2-speed: ≥ 64 Fast; 3-speed: thirds = Stop/Slow/Fast), and the
+    sustain pedal. The last one moved wins, and `stats.speed` reports the result, which the lit lamps show. 2-speed
+    treats Stop as Slow. Variable sweeps Slow→Fast from the mod wheel, the expression pedal or the Speed CC (measured:
+    wheel at half → 3.75 Hz).
+  - Per-rotor overrides (Follow/Stop/Slow/Fast), Drum Off, directions (horn and drum opposite by default),
+    Stationary. **Brake to angle:** below 0.4 Hz the horn steers onto the chosen angle (at least 0.15 Hz, so it
+    arrives within seconds). Measured: stops at 90.0° when asked for 90°.
+- **Cabinet DSP** (`dsp/Rotary.h`): a Linkwitz-Riley crossover feeds one delay line per rotor. Each mic reads the
+  direct sound plus a back-wall and a side-wall reflection. Per pickup: c = cos(rotor − mic angle); Doppler = radius ×
+  (1 − c) / 343 m/s; a one-pole directional low-pass moving between the "away" and "facing" corners; AM = 1 − depth +
+  depth × ((1 + c)/2)ⁿ (horn n = 2, a narrow beam; drum n = 1). Dual active horns add a copy at +180°. The mic layouts
+  (mono, stereo horn + mono drum, wide stereo, 3-mic with the drum close-miked, room pair front/back) place the
+  pickups. Mic distance trades AM for reflections. The Room mic adds two late (9 / 12.5 ms), dark pickups. Box
+  resonance is a peaking filter on the drum path; an open back lowers it to 30%, and lengthens and raises the back
+  reflection. Measured: horn Doppler ±41 cents at Fast (r·ω/c gives ±31.6; the zero-crossing measure also sees the
+  reflections), ±5.1 at Slow; AM swing 10.6 dB at Fast, 0.01 dB stationary; horn L/R correlation 0.39 (stereo horn).
+- **Four cabinet models** (`dsp/Cabinets.h`) as data: Rotor 22, Rotor 45 (smaller box with a 180 Hz resonance,
+  +4 dB more amp gain, breaks up sooner), Single Rotor (drum only, foam baffle, 10" voicing), and Tone Cabinet
+  (stationary, speakers spread at fixed angles, built-in spring reverb at 0.25). **The voicings are The Ham's
+  estimates.** No measured data for these cabinets was found, so they are the thing to judge by ear. Picking a model
+  in the UI sends `cabinetModel {model}`, and the processor sets the model and its defaults (speeds, ramps, rotor
+  configuration, baffle, crossover, back, mic layout) as ordinary parameter changes, so the host records them.
+  Automating `cabModel` alone changes only the fixed voicing.
+- **Tube amp:** first-order ADAA on f(x) = x / (1 + |x|) with a bias (even harmonics), at 1×, 2× or 4×. It is
+  normalised to unity small-signal gain, then **level-matched** like Brass Knuckles' drive: input against output
+  power over about 300 ms, boost only, at most +26 dB. Without the level matching, heavy drive lost about 20 dB.
+  Drive adds 0–30 dB on top of the model's own amp gain.
+  - **Oversampling (changed from the plan):** both 2× and 4× use polyphase IIR half-bands (Valenzuela–Constantinides
+    as in HIIR, WTFPL; coefficients computed at start-up from the formula, so the JS engine gets the same numbers).
+    Stage A has 8 coefficients (flat to 20 kHz, −99 dB from 28 kHz) and stage B 4 (−82 dB from 72 kHz). The plan had
+    a linear-phase FIR at 4× (Brass Knuckles', about 30 samples) and no delay at 2×. Any 2× filter delays a little, so
+    instead: **1× = 0, 2× = 3, 4× = 4 samples**, measured (3.3 and 4.2 on a quiet 200 Hz tone) and reported to the
+    host when Amp OS changes. Bypassing the cabinet doesn't change the reported value (a difference under 0.1 ms).
+  - Measured aliasing, a C6 sine driven ×8: 1× −53 dB, 2× −77 dB, 4× −78 dB; driven ×2 at 4×, −78 dB. An
+    unspecified function-argument evaluation order (MSVC: right to left) first fed the 4× ADAA its samples out of
+    order (−69 dB). The calls are now one per statement.
+- **Outboard:** overdrive (0–36 dB into the same ADAA shaper; tone 0.8–8 kHz; output scaled by 1/√gain, so it gets
+  louder as it's driven, like a pedal), wah (TPT band-pass, Q 4, 350 Hz–2.3 kHz, from the knob, the expression pedal
+  (which then stops being the volume pedal), the mod wheel or a CC; measured centroid 515 → 1308 Hz heel to toe), and
+  tape echo (to 1.2 s, wow 0.6 Hz and flutter 5.5 Hz, darkened and saturated repeats, time changes glide; measured: the
+  second repeat is −5.7 dB at feedback 0.5). Each crossfades in and out over one chunk.
+- **Spring reverb:** four springs (27–46 ms loops, each with an 8-stage dispersive all-pass, a Tone low-pass and a
+  DC-blocking high-pass in the loop), two per channel. The input is high-passed at 200 Hz. Measured: −33.5 dB half a
+  Decay after a note (−30 expected); L/R correlation −0.27. It is built into the Tone Cabinet (0.25) and the A-100
+  (+0.15). Reverb On adds its Mix on top.
+- **Organ models:** C-3 sounds exactly like the B-3 (tested; the UI difference comes in phase 4). A-100 is the B-3
+  voice plus its built-in reverb. M-3 has 44-key manuals (F–C), no 16' on the lower manual, 13 pedals, the A-based
+  generator foldback (setBfree `TG_82FB09`, lowest wheel 10), and untapered keys. **The M-3 taper is an
+  approximation**; none was found. Changing the model releases every key and re-wires.
+- **Mono compatibility:** every cabinet × mic layout at Fast with the room mic on, a full chord on all manuals. In
+  1/3-octave bands (125 Hz–8 kHz) the mono sum loses at most **6.2 dB** against the stereo average (Tone Cabinet,
+  3-mic). The test limit is 9 dB.
+- **No click on Slow↔Fast:** energy above 12 kHz in 2 ms windows. This band swings a lot all the time (up to 48× its
+  median here), so the check compares the loudest window around the switches (17.6×) with the loudest elsewhere.
+- Engine output is now stereo. The processor sends `rotor {hornAngle, drumAngle, hornHz, drumHz}` (angles in turns,
+  0 = facing the front) on every 30 Hz tick while it changes; the UI shows the horn and drum rpm, and phase 4 animates
+  the drawing from it. `stats.speed` lights the Stop/Slow/Fast lamps.
+- CPU (`--bench`): every key, every drawbar, percussion, scanner on both manuals, leakage and Age 100%, Fast rotors,
+  4× amp, dual active horns, 3 mics + room, overdrive + wah + echo + reverb: **4.6%** of one core. One key: 3.2%.
+- Checks: 33 cabinet checks (`--cabinet`) on top of phases 1–2 (whose generator checks now run with the cabinet
+  bypassed); presets level-matched again (−18.03 .. −17.96 dB); `--host-check`; `check-params.ps1`.
+
+What to listen for in Minihost Modular (phase 3):
+- **Slow ↔ Fast** (the CABINET switch, or the mod wheel above / below the middle): the horn reaches speed in about a
+  second, the drum takes about four. On braking the drum keeps churning after the horn has settled. No clicks.
+- **Rotor 22 vs Rotor 45 vs Single Rotor vs Tone Cabinet:** deep and wide; tighter and boxier and earlier to break
+  up; narrow and watery; straight with reverb. These voicings are estimates, so tell me what sounds off.
+- **Drive** (VOICE page) on Full Organ / Overdrive Stack: it should bite and break up smoothly without fizz, and stay
+  at about the same loudness. Try Amp OS 1× vs 4× on high notes.
+- **Mics:** Mono, Stereo Horn, Wide, 3-Mic, Room Pair, distance and angle, the Room mic; Horn only, Drum only,
+  Stationary; Dual Active horns; Short mouth; Open back; brake to angle (3-speed, Stop, Stop at Angle).
+- **Pedals and reverb:** overdrive into the cabinet, the wah on the expression pedal, tape echo, spring reverb.
+- **Organ models:** M-3 (shorter keyboards, no lower 16'), A-100 (built-in reverb).
+- **Latency:** the host should show 3 samples at 2× and 4 at 4×.
+
+Phase 2 notes:
+- **Percussion** = the upper manual's 4' (Second) or 2⅔' (Third) busbar, so it gets the same key click and foldback,
+  times an envelope that falls 60 dB over the decay time. Measured: −30.0 dB at half of Fast (0.3 s) and Slow (1.0 s).
+  Defaults are the brief's values. setBfree uses 1 s and 4 s (`percFastDecaySeconds`, `percSlowDecaySeconds`), and its
+  definition of "decay seconds" isn't stated. The times are parameters, so they can be set by ear.
+  - Single trigger: the envelope restarts only on a key press while no other upper key is held. Measured: a legato
+    note 0.5 s in adds 1·10⁻⁷ (nothing). The first note after a full release retriggers.
+  - Works only on drawbar set B. On, it takes the 1' busbar (the 1' bar goes silent). Normal lowers the upper
+    drawbars by −4.36 dB (setBfree's `percDrawbarNormalGain` 0.60512). Soft is −6.0 dB (0.5012). Both measured exactly.
+  - Percussion and pedals bypass the scanner, as on the B-3.
+- **Scanner vibrato / chorus:** a line of 18 second-order all-pass sections (7.9 kHz, Q 0.6; flat magnitude, near-constant
+  delay, like an LC ladder) with 19 taps. The scanner position is depth × (1 − cos rotor) / 2, and adjacent taps
+  are blended linearly, which models the plate overlap. A 6.5 kHz low-pass on the scanned signal stands in for the
+  line's treble loss. The rotor turns at 6.87 Hz on 60 Hz mains and follows the motor (and the pitch dive). V1/V2/V3
+  sweep 6/12/18 sections. **Measured on a 440 Hz tone: ±13.7, ±27.4, ±41.1 cents**, at a measured rate of 7.0 cycles
+  per second (6.87 Hz set). C1–C3 = (scanned + straight) / 2, exact to 1·10⁻⁸. Separate Upper and Lower switches
+  (measured: the lower manual stays steady with only Upper on). I found no published depth figures, so the depths
+  can be tuned by ear (`Scanner::kSectionHz` and the 6/12/18 table).
+- **Preamp / expression** (CC11 or the Expression CC, or the on-screen EXPR pedal): three bands split by one-pole
+  low-passes at 200 Hz and 2.5 kHz. With the pedal closed: bass −14, mids −26, treble −32 dB, linear in dB with the
+  pedal position. The pedal is smoothed (12 ms) and ramped per sample. Open, the bands sum back to the input exactly.
+  Measured on a chord with pedal bass: open −15.9 dBFS / centroid 1207 Hz, half −27.3 / 1018 Hz, closed −36.5 / 827 Hz.
+  With the pedal closed, the bass fell 14.4 dB and the mids 22.1 dB.
+- **Drive** has no effect until the cabinet's tube amp exists (phase 3). The UI says so.
+- **Leakage** per manual (pedals follow the lower manual's): when a contact closes, its wheel's compartment partner
+  (setBfree `wheelPairs`: 1–36 ↔ 49–84, 42–48 ↔ 85–91) leaks onto the same busbar. The same wheel also leaks onto the
+  neighbouring busbars at half that level. At Leak 100% that is −30 dB; at the default 30%, −40 dB, which is
+  setBfree's default crosstalk. Measured: the partner sits at −33.7 dB, which is −30 dB plus that wheel's own −3.8 dB
+  voicing. There is also an always-present floor: every wheel at −66 dB × (0.3–1.0, rising with pitch), measured at
+  −84 dBFS with no keys at 100%. The preset tests now allow it in release tails (below −80 dBFS).
+- **Age** per manual: contact levels spread ±3 dB (seeded, fixed per instrument), wheel levels ±2 dB, plus 2nd and 3rd
+  harmonics that are smaller on the filter-capacitor wheels (above 43), and more leakage (× (1 + Age)). The generator is
+  shared, so its wear follows the higher of the two Age settings. Measured at 100%: 2nd harmonic of wheel 13 −34 dB
+  (new: −109 dB), key-to-key spread in a flat-taper range 5.7 dB (new: 0.03 dB). A changed Age reaches each contact
+  the next time it makes or breaks.
+- **Sustain:** pedal and lower-manual sustain release the contacts along an exponential to −60 dB over the set time.
+  Measured: −9.2 dB 0.1 s after release with 0.6 s (−10 expected), −14.9 dB at 0.25 s of 1 s (−15 expected).
+  **Manual bass:** the lowest held lower key also plays the pedal of the same name, folded into the 25 pedals.
+  Tested to follow, release and fold.
+- **Preset keys:** the fixed registrations C♯–A are now **editable**, per manual, on the DRAWBARS page. They are saved
+  in the project state (`registrations`) and in presets (a `"registrations"` block). A preset or project without them
+  gets the factory chart. The upper chart is confirmed against hammondwiki's StandardPresets (via a page that cites it
+  and the service manual). For the lower manual only the names are published (Cello, Open Diapason, …, Full Great),
+  several marked "estimated", so the lower manual starts from the upper chart. **Keyswitches** (off by default): MIDI
+  24–35 on a manual's channel press its preset keys and never sound; they are off in Split.
+- **MIDI learn:** a LEARN button, then click a control and move a CC. One CC per control; learned CCs win over the
+  drawbar maps. Right-click in learn mode forgets. Bank select, sustain and channel-mode CCs can't be learned. The map
+  is part of the **project state**, not of presets: it describes your hardware, not the sound, so loading a preset
+  keeps it. (CONVENTIONS.md planned a `"cc"` preset block; I changed that and noted it there.)
+- New bridge events: UI → host `expression {value}`, `setRegistration {manual,key,bars}`, `midiLearn {id}`,
+  `midiForget {id}`, `learnCancel`. Host → UI `registrations {upper[9], lower[9]}`, `learn {armed, map}`, and `stats.perc`.
+- Measured CPU (`--bench`): all 147 keys, every drawbar, percussion, the scanner on both manuals, leakage and Age at
+  100%: **3.7%** of one core. One key: 2.1%. Presets level-matched again (−18.05 .. −17.96 dB). C3 chorus and Normal
+  percussion lower the starter presets by about 2 dB, which the level matching takes up.
+- Checks: 26 voice checks (`--voice`) on top of phase 1's 35, a preset-file test for the registrations block,
+  `--host-check`, `check-params.ps1`, and the headless UI smoke test (now 13 checks: learn mode, the registration
+  editor, the expression pedal).
+
+What to listen for in Minihost Modular (phase 2):
+- **Percussion** (VOICE page; Trio Classic has it on): a bright "pop" on the first note of a phrase. Play legato and
+  later notes don't pop; lift every key and the next one pops again. Fast vs Slow, Second vs Third, Soft vs Normal
+  (Normal also drops the drawbars a little). Switch to set A (A♯ preset key): no percussion. Pull out the 1' bar with
+  percussion on: it stays silent.
+- **Vibrato / chorus:** V1–V3 should be clearly different depths at a steady 6.9 Hz wobble. C3 is the classic shimmer.
+  Upper and Lower switch separately. If the depths sound wrong to you, tell me which way.
+- **Expression:** CC11 (or the EXPR pedal next to the keys). Half-closed should sound darker as well as quieter, with
+  the bass holding up.
+- **Leakage / Age:** at 100% with no keys there's a faint high whine (the generator floor). Held notes get a faint halo.
+  Age at 100%: grittier lows, slightly uneven keys.
+- **Pedal / lower sustain**, **Manual Bass** (one keyboard: the lowest lower-manual note plays the pedals).
+- **Preset keys:** edit a fixed registration (DRAWBARS page, under the bars), press its preset key, then save and reload
+  a preset. **Keyswitches** (PLAY · MIDI) and **MIDI learn** (LEARN, click a control, move a knob).
 
 Phase 1 notes:
 - The full parameter table (143 parameters, every phase) is defined and frozen now, so projects saved during testing keep
@@ -175,11 +335,16 @@ Key decisions:
 | 91 wheel frequencies | computed from the gear formula; spot values published by Electric Druid (65.38 Hz lowest manual C, 2092.31 Hz highest manual C, 4440 Hz C♯8) | done: all 91 tested, A = 440.000 Hz, −0.71 .. +1.98 cents from ET |
 | Key → wheel wiring, foldback, low-wheel use | setBfree `applyManualDefaults()` (`TG_91FB12`: the rule), cross-checked against Electric Druid's foldback table (the test's reference) | done (phase 1) |
 | Key taper | setBfree `taperingModel()` | done (phase 1) |
-| Pedal composites | none found; The Ham's approximation | tune by ear in phase 2 |
-| Per-wheel voicing, capacitor-filtered wheels | none found yet; approximation in `dsp/Tonewheels.h` | look again in phase 2 (Age) |
-| Fixed preset-key registrations | B-3 factory chart as commonly published (upper) | verify and add the lower chart in phase 2 |
-| Scanner line and plate pattern | service manual vibrato schematic; setBfree `vibrato.c` (scanner 7.25 Hz default, V1–V3 depth) as a cross-check | phase 2 |
-| Rotor speeds and ramps | 122 / 145 service data and measured recordings (brief's values as defaults) | phase 3 |
+| Pedal composites | none found; The Ham's approximation | to tune by ear (hand-testing) |
+| Per-wheel voicing, capacitor-filtered wheels | none found; approximation in `dsp/Tonewheels.h` | to tune by ear |
+| Fixed preset-key registrations | upper: hammondwiki StandardPresets (as quoted by fubsypoly-musicstudio.pages.dev/hammond-b3/vol-3, which cites it and the B-3/C-3 service manual), matches the chart used. Lower: names only, several "estimated" | upper confirmed (phase 2). Lower uses the upper chart; editable |
+| Scanner line and plate pattern | no schematic values found. setBfree `vibrato.c` (scanner 7.25 Hz default) as a cross-check. Rate here 6.87 Hz (the brief's ~6.9) | modeled (phase 2); depths measured, to tune by ear |
+| Percussion levels and decay | setBfree `tonegen.c` (Normal drawbar gain 0.60512, Soft 0.5012; decay 1 s / 4 s, definition not stated) | levels used. Decay: brief's 0.3 / 1.0 s to −60 dB, adjustable |
+| Leakage partners and level | setBfree `wheelPairs`, default crosstalk 0.01 (−40 dB) | used (phase 2) |
+| Rotor speeds and ramps | the brief's values (Rotor 22); the other models' are estimates | done (phase 3); ramp times exact to the parameters |
+| Cabinet voicings (radii, AM, filters, box, amp) | none found; The Ham's estimates in `dsp/Cabinets.h` | to judge by ear |
+| IIR half-band design | HIIR (Laurent de Soras, WTFPL): the Valenzuela–Constantinides formula | done (phase 3) |
+| M-3 generator / keyboard | setBfree `TG_82FB09` (A-based generator, foldback at wheel 10); 44-key F–C manuals, no lower 16' | done; taper is an approximation |
 | Drawbar controller CC maps | Apple EVB3 manual, "MIDI controller assignments" (B4D, Nord Electro, VK / CX-3) | done (phase 1); Hammond SK and Crumar still to source |
 
 setBfree is GPL-2. Only facts are taken from it (gear ratios, footage offsets, foldback limits, taper steps), as data and

@@ -16,6 +16,8 @@ int runLoudness();
 int runBench();
 int runHostCheck (const juce::String& path);
 int runOrganTests();
+int runVoiceTests();
+int runCabinetTests();
 double presetLoudness (const PresetData&);
 
 static void testParamTable()
@@ -113,6 +115,28 @@ static void testPresetFiles (const PresetManager& pm)
         CHECK (in.values[upB1] == 7.0f && std::abs (in.values[ampLevel] + 3.25f) < 1e-5f);
     }
 
+    // fixed preset-key registrations: written, read back; a file without them gets the factory chart
+    {
+        PresetData r;
+        r.name = "Regs";
+        r.values[upB1] = 8;
+        r.registrations[1][4] = { 8, 7, 6, 5, 4, 3, 2, 1, 0 };
+        CHECK (PresetManager::writeFile (tmp, r, err));
+        PresetData in;
+        CHECK (PresetManager::readFile (tmp, in, err));
+        CHECK (in.registrations == r.registrations);
+        const auto json = juce::JSON::parse (tmp);
+        CHECK (json["registrations"]["lower"][4].toString() == "87 6543 210" && json["registrations"]["upper"][0].toString() == "00 5320 000");
+        tmp.replaceWithText (R"({"params":{"upB1":8},"registrations":{"upper":["888","bad!"]}})");
+        PresetData partialRegs;
+        CHECK (PresetManager::readFile (tmp, partialRegs, err));
+        CHECK (partialRegs.registrations[0][0] == (std::array<int, 9> { 8, 8, 8, 0, 0, 0, 0, 0, 0 })
+               && partialRegs.registrations[0][1] == factoryRegistrations()[0][1] && partialRegs.registrations[1] == factoryRegistrations()[1]);
+        tmp.replaceWithText (R"({"params":{"upB1":8}})");
+        PresetData noRegs;
+        CHECK (PresetManager::readFile (tmp, noRegs, err) && noRegs.registrations == factoryRegistrations());
+    }
+
     // older/partial file (no version): missing params stay NaN (-> defaults), values clamped
     tmp.replaceWithText (R"({"name":"Partial","params":{"upB3":5,"tuneA":999,"unknownParam":5}})");
     PresetData partial;
@@ -147,9 +171,10 @@ static void testPresetRenders (const PresetManager& pm)
         for (int n : { 60, 64, 67 }) { ev.push_back ({ sec (0.02), Event::On, n, 100.0, 0 }); ev.push_back ({ sec (1.2), Event::Off, n, 0.0, 0 }); }
         ev.push_back ({ sec (0.02), Event::On, 36, 100.0, 2 });
         ev.push_back ({ sec (1.2), Event::Off, 36, 0.0, 2 });
-        const auto a = render (v, ev, 2.0);
-        const double level = rms (a, sec (0.3), sec (1.1)), pk = peak (a), tail = rms (a, sec (1.7), sec (2.0));
-        const bool ok = level > 0.01 && pk < 0.8 && tail == 0.0;
+        const auto a = render (v, ev, 4.5);
+        const double level = rms (a, sec (0.3), sec (1.1)), pk = peak (a), tail = rms (a, sec (4.2), sec (4.5));
+        // 3 s after release (reverbs gone) only the leakage floor is left (always present, as on the organ): below -80 dBFS
+        const bool ok = level > 0.01 && pk < 0.8 && tail < 1e-4;
         if (! ok) ++failures;
         std::printf ("%-4s render %-38s rms %.3f  peak %.3f  tail %.1e\n", ok ? "ok" : "FAIL",
                      (p.category + "/" + p.name).toRawUTF8(), level, pk, tail);
@@ -182,12 +207,16 @@ int main (int argc, char* argv[])
     if (cmd == "--bench") return runBench();
     if (cmd == "--host-check" && argc >= 3) return runHostCheck (argv[2]);
     if (cmd == "--organ") return runOrganTests() == 0 ? 0 : 1;
+    if (cmd == "--voice") return runVoiceTests() == 0 ? 0 : 1;
+    if (cmd == "--cabinet") return runCabinetTests() == 0 ? 0 : 1;
 
     PresetManager pm;
     testParamTable();
     testFactoryPresets (pm);
     testPresetFiles (pm);
     failures += runOrganTests();
+    failures += runVoiceTests();
+    failures += runCabinetTests();
     testPresetRenders (pm);
     testLoudness (pm);
 

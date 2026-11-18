@@ -70,6 +70,7 @@
         <span class="indicator"><span class="led" id="sustain-led"></span>SUS</span>
         <span class="indicator" title="Expression pedal (CC11)">EXPR <span class="mini-meter"><div id="expr-mini"></div></span></span>
         <span class="indicator" title="Tonewheel motor speed"><span class="led on" id="motor-led"></span>MOTOR</span>
+        <button id="learn-btn" type="button" class="pd-btn learn-btn" title="MIDI learn: click, then click a control and move a controller">LEARN</button>
         <button id="panic-btn" type="button" class="panic">PANIC</button>
       </div>
     </header>
@@ -121,6 +122,7 @@
         </div>
         <span id="octave-readout" class="oct-readout"></span>
         <span class="kbd-hint">Keys A–' play<br>the upper manual<br>Z / X octave</span>
+        <div id="expr-slot"></div>
       </div>
       <div class="kb-rows">
         <div class="kb-row"><div id="pk-upper"></div><div id="kb-upper"></div></div>

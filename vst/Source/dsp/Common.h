@@ -48,4 +48,47 @@ inline double drawbarGain (double pos)
     if (pos >= 1.0) return std::pow (10.0, (pos - 8.0) * 3.0 / 20.0);
     return pos * 0.08912509381337455; // 10^(-21/20)
 }
+
+// Biquad, transposed direct form II; designs from the RBJ cookbook.
+struct Biquad
+{
+    double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, s1 = 0, s2 = 0;
+    double process (double x)
+    {
+        const double y = b0 * x + s1;
+        s1 = b1 * x - a1 * y + s2;
+        s2 = b2 * x - a2 * y;
+        return y;
+    }
+    void reset() { s1 = s2 = 0; }
+    // RBJ cookbook
+    void setAllpass (double f0, double q, double sr)
+    {
+        const double w = kTwoPi * f0 / sr, alpha = std::sin (w) / (2.0 * q), cw = std::cos (w), a0 = 1.0 + alpha;
+        b0 = (1.0 - alpha) / a0; b1 = -2.0 * cw / a0; b2 = 1.0;   // b2 = (1 + alpha) / a0
+        a1 = -2.0 * cw / a0; a2 = (1.0 - alpha) / a0;
+    }
+    void setLowpass (double f0, double q, double sr)
+    {
+        const double w = kTwoPi * f0 / sr, alpha = std::sin (w) / (2.0 * q), cw = std::cos (w), a0 = 1.0 + alpha;
+        b0 = (1.0 - cw) / 2.0 / a0; b1 = (1.0 - cw) / a0; b2 = b0;
+        a1 = -2.0 * cw / a0; a2 = (1.0 - alpha) / a0;
+    }
+    void setHighpass (double f0, double q, double sr)
+    {
+        const double w = kTwoPi * f0 / sr, alpha = std::sin (w) / (2.0 * q), cw = std::cos (w), a0 = 1.0 + alpha;
+        b0 = (1.0 + cw) / 2.0 / a0; b1 = -(1.0 + cw) / a0; b2 = b0;
+        a1 = -2.0 * cw / a0; a2 = (1.0 - alpha) / a0;
+    }
+    void setPeak (double f0, double q, double db, double sr)
+    {
+        const double A = std::pow (10.0, db / 40.0);
+        const double w = kTwoPi * f0 / sr, alpha = std::sin (w) / (2.0 * q), cw = std::cos (w), a0 = 1.0 + alpha / A;
+        b0 = (1.0 + alpha * A) / a0; b1 = -2.0 * cw / a0; b2 = (1.0 - alpha * A) / a0;
+        a1 = -2.0 * cw / a0; a2 = (1.0 - alpha / A) / a0;
+    }
+};
+
+// One-pole low-pass: y += a (x - y), a from the corner frequency.
+inline double onePoleCoef (double hz, double sr) { return 1.0 - std::exp (-kTwoPi * hz / sr); }
 } // namespace ham

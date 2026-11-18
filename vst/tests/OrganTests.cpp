@@ -16,6 +16,8 @@ Values organValues()
     auto v = defaultValues();
     for (int m = 0; m < 2; ++m) for (int s = 0; s < 2; ++s) setBars (v, m, s, "000000000");
     v[pd16] = 0; v[pd8] = 0;
+    v[leakUp] = v[leakLo] = v[ageUp] = v[ageLo] = 0;   // phase 1 checks: a new, leak-free generator
+    v[cabBypass] = 1;                                     // ... measured dry (no cabinet)
     return v;
 }
 

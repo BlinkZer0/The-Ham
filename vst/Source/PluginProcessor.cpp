@@ -16,6 +16,8 @@ TheHamProcessor::TheHamProcessor()
         rawValues[(size_t) i] = apvts.getRawParameterValue (id);
         jassert (params[(size_t) i] != nullptr && rawValues[(size_t) i] != nullptr);
     }
+    for (auto& m : learnMap) m = -1;
+    setRegistrations (factoryRegistrations());
     setCurrentProgram (0); // a fresh instance starts on the first factory preset
     startTimerHz (50);
 }
@@ -25,6 +27,27 @@ void TheHamProcessor::prepareToPlay (double sampleRate, int)
 {
     engine.setParams (readParams());
     engine.prepare (sampleRate);
+    reportedOS = juce::roundToInt (paramValue (ampOS));
+    setLatencySamples (SynthEngine::latencySamples (reportedOS));
+}
+
+void TheHamProcessor::applyCabinetModel (int model)
+{
+    model = juce::jlimit (0, 3, model);
+    const auto& M = cabinetModel (model);
+    const std::pair<int, float> values[] {
+        { cabModel, (float) model }, { rotorConfig, (float) M.rotorConfig },
+        { hornSlow, (float) M.hornSlow }, { hornFast, (float) M.hornFast }, { hornAccel, (float) M.hornAccel }, { hornBrake, (float) M.hornBrake },
+        { drumSlow, (float) M.drumSlow }, { drumFast, (float) M.drumFast }, { drumAccel, (float) M.drumAccel }, { drumBrake, (float) M.drumBrake },
+        { drumBaffle, (float) M.drumBaffle }, { xover, (float) M.xover }, { cabBack, (float) M.cabBack }, { micLayout, (float) M.micLayout },
+    };
+    for (const auto& [index, v] : values)
+    {
+        auto* p = params[(size_t) index];
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (p->convertTo0to1 (v));
+        p->endChangeGesture();
+    }
 }
 
 bool TheHamProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -35,7 +58,80 @@ bool TheHamProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 EngineParams TheHamProcessor::readParams() const
 {
-    return makeEngineParams ([this] (int i) { return paramValue (i); });
+    auto p = makeEngineParams ([this] (int i) { return paramValue (i); });
+    for (int m = 0; m < 2; ++m)
+        for (int k = 0; k < 9; ++k)
+            for (int f = 0; f < kNumFootages; ++f)
+                p.regs[m][k][f] = regStore[(size_t) ((m * 9 + k) * kNumFootages + f)].load();
+    return p;
+}
+
+//==============================================================================
+Registrations TheHamProcessor::registrations() const
+{
+    Registrations r {};
+    for (int m = 0; m < 2; ++m)
+        for (int k = 0; k < 9; ++k)
+            for (int f = 0; f < kNumFootages; ++f)
+                r[(size_t) m][(size_t) k][(size_t) f] = regStore[(size_t) ((m * 9 + k) * kNumFootages + f)].load();
+    return r;
+}
+
+void TheHamProcessor::setRegistrations (const Registrations& r)
+{
+    for (int m = 0; m < 2; ++m)
+        for (int k = 0; k < 9; ++k)
+            for (int f = 0; f < kNumFootages; ++f)
+                regStore[(size_t) ((m * 9 + k) * kNumFootages + f)] = juce::jlimit (0, 8, r[(size_t) m][(size_t) k][(size_t) f]);
+    ++registrationsVersion;
+}
+
+void TheHamProcessor::setRegistration (int manual, int key, const std::array<int, kNumFootages>& bars)
+{
+    if (manual < 0 || manual > 1 || key < 0 || key > 8) return;
+    for (int f = 0; f < kNumFootages; ++f)
+        regStore[(size_t) ((manual * 9 + key) * kNumFootages + f)] = juce::jlimit (0, 8, bars[(size_t) f]);
+    ++registrationsVersion;
+}
+
+//==============================================================================
+void TheHamProcessor::forgetLearn (int paramIndex)
+{
+    for (auto& m : learnMap)
+        if (m.load() == paramIndex) m = -1;
+    if (learnArmed.load() == paramIndex) learnArmed = -1;
+    ++learnVersion;
+}
+
+int TheHamProcessor::learnedCC (int paramIndex) const
+{
+    for (int cc = 0; cc < 128; ++cc)
+        if (learnMap[(size_t) cc].load() == paramIndex) return cc;
+    return -1;
+}
+
+// "cc=paramId;cc=paramId..." (parameter IDs are stable)
+juce::String TheHamProcessor::learnStateString() const
+{
+    juce::String s;
+    for (int cc = 0; cc < 128; ++cc)
+        if (const int i = learnMap[(size_t) cc].load(); i >= 0 && i < kNumParams)
+            s << cc << '=' << paramDefs()[(size_t) i].id << ';';
+    return s;
+}
+
+void TheHamProcessor::restoreLearnState (const juce::String& s)
+{
+    for (auto& m : learnMap) m = -1;
+    for (const auto& item : juce::StringArray::fromTokens (s, ";", ""))
+    {
+        const int cc = item.upToFirstOccurrenceOf ("=", false, false).getIntValue();
+        const auto id = item.fromFirstOccurrenceOf ("=", false, false);
+        for (int i = 0; i < kNumParams; ++i)
+            if (paramDefs()[(size_t) i].id == id && cc >= 0 && cc < 128) learnMap[(size_t) cc] = i;
+    }
+    learnArmed = -1;
+    ++learnVersion;
 }
 
 void TheHamProcessor::uiKey (int manual, int key, int vel)
@@ -43,6 +139,14 @@ void TheHamProcessor::uiKey (int manual, int key, int vel)
     const auto scope = uiKeyFifo.write (1);
     if (scope.blockSize1 > 0) uiKeyBuf[(size_t) scope.startIndex1] = { (int8_t) manual, (int8_t) key, (int8_t) juce::jlimit (0, 127, vel) };
     else if (scope.blockSize2 > 0) uiKeyBuf[(size_t) scope.startIndex2] = { (int8_t) manual, (int8_t) key, (int8_t) juce::jlimit (0, 127, vel) };
+}
+
+void TheHamProcessor::pushParamChange (int index, float value, bool normalized)
+{
+    const auto scope = paramFifo.write (1);
+    const ParamChange pc { index, value, normalized };
+    if (scope.blockSize1 > 0) paramBuf[(size_t) scope.startIndex1] = pc;
+    else if (scope.blockSize2 > 0) paramBuf[(size_t) scope.startIndex2] = pc;
 }
 
 // Drawbar CC maps: a mapped CC becomes a parameter change of the active set's drawbar,
@@ -55,11 +159,43 @@ bool TheHamProcessor::handleMappedCC (const juce::MidiMessage& m)
     if (t.manual < 0) return false;
     const int key = juce::roundToInt (paramValue (t.manual == 0 ? upKey : loKey));
     const int set = key == 10 ? 0 : 1;
-    const auto scope = paramFifo.write (1);
-    const ParamChange pc { drawbarParam (t.manual, set, t.foot), m.getControllerValue() * 8.0f / 127.0f };
-    if (scope.blockSize1 > 0) paramBuf[(size_t) scope.startIndex1] = pc;
-    else if (scope.blockSize2 > 0) paramBuf[(size_t) scope.startIndex2] = pc;
+    pushParamChange (drawbarParam (t.manual, set, t.foot), m.getControllerValue() * 8.0f / 127.0f, false);
     return true;
+}
+
+// MIDI learn (an armed parameter takes the next learnable CC; learned CCs win over the drawbar
+// maps) and the preset-key keyswitches. Returns true if the message was used up here.
+bool TheHamProcessor::handleLearnAndKeyswitches (const juce::MidiMessage& m)
+{
+    if (m.isController())
+    {
+        const int cc = m.getControllerNumber();
+        if (! learnableCC (cc)) return false;
+        if (const int armed = learnArmed.load(); armed >= 0)
+        {
+            for (auto& slot : learnMap)
+                if (slot.load() == armed) slot = -1;
+            learnMap[(size_t) cc] = armed;
+            learnArmed = -1;
+            ++learnVersion;
+        }
+        if (const int target = learnMap[(size_t) cc].load(); target >= 0)
+        {
+            pushParamChange (target, m.getControllerValue() / 127.0f, true);
+            return true;
+        }
+        return false;
+    }
+    if (m.isNoteOnOrOff())
+    {
+        const auto ks = presetKeyswitch (m.getNoteNumber(), m.getChannel() - 1, paramValue (ksOn) >= 0.5f,
+                                         paramValue (splitMode) >= 0.5f, juce::roundToInt (paramValue (chUpper)) - 1,
+                                         juce::roundToInt (paramValue (chLower)) - 1);
+        if (ks.manual < 0) return false;
+        if (m.isNoteOn()) pushParamChange (ks.manual == 0 ? upKey : loKey, (float) ks.key, false);
+        return true;   // keyswitches never sound
+    }
+    return false;
 }
 
 void TheHamProcessor::timerCallback()
@@ -69,14 +205,22 @@ void TheHamProcessor::timerCallback()
     {
         for (int i = start; i < start + size; ++i)
         {
-            auto* p = params[(size_t) paramBuf[(size_t) i].index];
+            const auto& pc = paramBuf[(size_t) i];
+            auto* p = params[(size_t) pc.index];
             p->beginChangeGesture();
-            p->setValueNotifyingHost (p->convertTo0to1 (paramBuf[(size_t) i].value));
+            p->setValueNotifyingHost (pc.normalized ? pc.value : p->convertTo0to1 (pc.value));
             p->endChangeGesture();
         }
     };
     apply (scope.startIndex1, scope.blockSize1);
     apply (scope.startIndex2, scope.blockSize2);
+
+    // the amp's oversampling filters delay the output a few samples: tell the host
+    if (const int os = juce::roundToInt (paramValue (ampOS)); os != reportedOS)
+    {
+        reportedOS = os;
+        setLatencySamples (SynthEngine::latencySamples (os));
+    }
 }
 
 void TheHamProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -88,6 +232,8 @@ void TheHamProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 
     if (panicRequested.exchange (false))
         engine.panic();
+    if (const float e = uiExpression.exchange (-1.0f); e >= 0.0f)
+        engine.setExpression (e);
 
     {   // keys played on the on-screen keyboards
         const auto scope = uiKeyFifo.read (uiKeyFifo.getNumReady());
@@ -118,7 +264,7 @@ void TheHamProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
             pos = t;
         }
         const auto msg = meta.getMessage();
-        if (! handleMappedCC (msg))
+        if (! handleLearnAndKeyswitches (msg) && ! handleMappedCC (msg))
             routeMidi (engine, msg);   // MidiRouting.h (shared with the parity tool; mirrored in the web build)
     }
     if (pos < n)
@@ -139,6 +285,12 @@ void TheHamProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     statModWheel.store ((float) engine.modWheelValue());
     statExpression.store ((float) engine.expressionValue());
     statMotor.store ((float) engine.motorValue());
+    statPerc.store ((float) engine.percussionLevel());
+    statHornTurns.store ((float) engine.hornTurns());
+    statDrumTurns.store ((float) engine.drumTurns());
+    statHornHz.store ((float) engine.hornSpeed());
+    statDrumHz.store ((float) engine.drumSpeed());
+    statSpeed.store (engine.speedSwitch());
     const float pk = engine.takePeak();
     if (pk > statPeak.load()) statPeak.store (pk);
 }
@@ -160,6 +312,7 @@ void TheHamProcessor::applyPreset (const PresetData& preset)
         p->setValueNotifyingHost (norm);
         p->endChangeGesture();
     }
+    setRegistrations (preset.registrations);
 }
 
 void TheHamProcessor::setPresetInfo (const juce::String& id, const juce::String& name, const juce::String& category)
@@ -244,6 +397,7 @@ bool TheHamProcessor::saveUserPreset (const juce::String& rawName, bool overwrit
     data.category = "User";
     for (int i = 0; i < kNumParams; ++i)
         if (i != master && ! paramDefs()[(size_t) i].noPreset) data.values[(size_t) i] = paramValue (i);
+    data.registrations = registrations();
 
     if (! PresetManager::writeFile (file, data, error)) return false;
     presetManager.rescanIfChanged();
@@ -274,6 +428,14 @@ void TheHamProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("presetName", info.name, nullptr);
     state.setProperty ("presetCategory", info.category, nullptr);
     state.setProperty ("stateVersion", kPresetVersion, nullptr);
+    {
+        juce::StringArray regs;
+        const auto r = registrations();
+        for (int m = 0; m < 2; ++m)
+            for (int k = 0; k < 9; ++k) regs.add (registrationString (r[(size_t) m][(size_t) k]));
+        state.setProperty ("registrations", regs.joinIntoString ("|"), nullptr);
+    }
+    state.setProperty ("midiLearn", learnStateString(), nullptr);
 
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
@@ -298,6 +460,14 @@ void TheHamProcessor::setStateInformation (const void* data, int sizeInBytes)
                 setPresetInfo (state.getProperty ("presetId").toString(), name,
                                state.getProperty ("presetCategory").toString());
             }
+            {   // fixed preset-key registrations (missing in projects saved before phase 2: factory chart)
+                auto r = factoryRegistrations();
+                const auto regs = juce::StringArray::fromTokens (state.getProperty ("registrations").toString(), "|", "");
+                for (int i = 0; i < juce::jmin (18, regs.size()); ++i)
+                    parseRegistration (regs[i], r[(size_t) (i / 9)][(size_t) (i % 9)]);
+                setRegistrations (r);
+            }
+            restoreLearnState (state.getProperty ("midiLearn").toString());
             apvts.replaceState (state);
         }
     }

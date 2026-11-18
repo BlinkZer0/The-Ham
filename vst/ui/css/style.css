@@ -281,6 +281,15 @@ body:not(.web) .web-only { display: none; }
 .db-foot { fill: var(--muted); font: 700 9px var(--sans); text-anchor: middle; pointer-events: none; }
 .drawbar:hover .db-foot, .drawbar.active .db-foot { fill: var(--accent); }
 .db-pedal { align-self: stretch; display: flex; flex-direction: column; gap: 6px; padding: 0 6px; border-left: 1px solid #2b1a12; border-right: 1px solid #2b1a12; }
+/* fixed registrations of the preset keys */
+.reg-editor { display: flex; flex-direction: column; gap: 4px; background: #130b08; border: 1px solid #3a2318; border-radius: 10px; padding: 6px 10px; }
+.reg-row { display: flex; align-items: center; gap: 6px; }
+.reg-row-title { font-size: 9px; letter-spacing: 0.14em; font-weight: 700; color: var(--faint); width: 132px; flex: none; }
+.reg-cell { display: flex; align-items: center; gap: 3px; padding: 1px 3px; border-radius: 4px; border: 1px solid transparent; }
+.reg-cell.active { border-color: var(--accent-dim); background: rgba(242, 163, 58, 0.06); }
+.reg-key { font-size: 9px; font-weight: 700; color: var(--muted); width: 16px; text-align: right; }
+.reg-cell.active .reg-key { color: var(--accent); }
+.reg-input.small-reg { width: 84px; font-size: 11px; padding: 1px 2px; }
 .db-legend { display: flex; justify-content: center; gap: 18px; font-size: 10px; color: var(--faint); letter-spacing: 0.06em; }
 
 /* --------------------------------------------------------------- keybed --- */
@@ -332,3 +341,31 @@ body:not(.web) .web-only { display: none; }
 #modal-input { background: var(--screen); border: 1px solid var(--panel-edge); border-radius: 6px; color: var(--text); font: 14px var(--sans); padding: 8px 10px; outline: none; }
 #modal-input:focus { border-color: var(--accent-dim); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ------------------------------------------------------------ MIDI learn --- */
+.learn-btn.on { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+body.learning [data-param] { outline: 1px dashed rgba(242, 163, 58, 0.35); outline-offset: 1px; cursor: crosshair; }
+body.learning [data-param].learned { outline: 1px solid rgba(140, 194, 143, 0.7); }
+[data-param].learn-armed { outline: 2px solid var(--accent) !important; outline-offset: 2px; animation: learnPulse 0.8s ease-in-out infinite alternate; }
+@keyframes learnPulse { from { outline-color: var(--accent); } to { outline-color: transparent; } }
+body.learning [data-param].learned::after {
+  content: attr(data-cc); position: absolute; font: 700 8px var(--mono); color: #8cc28f; background: #0b0605;
+  padding: 0 3px; border-radius: 3px; pointer-events: none; transform: translate(-4px, -10px);
+}
+body.learning .knob, body.learning .drawbar { position: relative; }
+.perc-lamp { margin-left: auto; margin-right: 4px; }
+.kb-side .wheel-ctl { margin-top: 4px; }
+.wheel-ctl { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.wheel-svg { width: 22px; height: 92px; cursor: ns-resize; touch-action: none; outline: none; }
+.wh-slot { fill: #0b0605; stroke: #3a2519; }
+.wh-ridges line { stroke: #1d120d; stroke-width: 1.5; }
+.wh-fill { fill: var(--accent-dim); opacity: 0.6; }
+.wh-thumb { fill: var(--cream); stroke: #7d725f; }
+.wheel-value { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+/* ------------------------------------------------------------- speed lamps --- */
+.speed-lamps { display: flex; align-items: center; gap: 10px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; color: var(--muted); }
+.speed-lamp { display: flex; align-items: center; gap: 5px; }
+.speed-lamp.on { color: var(--accent); }
+.speed-lamp.on .led { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow), 0 0 2px var(--accent); }
+.rpm { margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: 0; color: var(--text); }

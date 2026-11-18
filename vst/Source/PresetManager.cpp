@@ -38,6 +38,35 @@ int applyParamObject (const juce::var& obj, std::array<float, kNumParams>& value
         }
     return found;
 }
+
+// "registrations": { "upper": ["00 5320 000", ... 9 strings, keys C#..A], "lower": [...] }
+// Entries that are missing or not a registration keep the factory value.
+void readRegistrations (const juce::var& obj, Registrations& r)
+{
+    r = factoryRegistrations();
+    if (! obj.isObject()) return;
+    const char* names[] { "upper", "lower" };
+    for (int m = 0; m < 2; ++m)
+        if (const auto* list = obj[names[m]].getArray())
+            for (int k = 0; k < juce::jmin (9, list->size()); ++k)
+            {
+                std::array<int, kNumFootages> bars {};
+                if (parseRegistration ((*list)[k].toString(), bars)) r[(size_t) m][(size_t) k] = bars;
+            }
+}
+
+juce::var registrationsToJson (const Registrations& r)
+{
+    auto* o = new juce::DynamicObject();
+    const char* names[] { "upper", "lower" };
+    for (int m = 0; m < 2; ++m)
+    {
+        juce::Array<juce::var> list;
+        for (int k = 0; k < 9; ++k) list.add (registrationString (r[(size_t) m][(size_t) k]));
+        o->setProperty (names[m], list);
+    }
+    return juce::var (o);
+}
 } // namespace
 
 PresetManager::PresetManager()
@@ -81,6 +110,7 @@ void PresetManager::loadFactory()
                 d.category = cat["name"].toString();
                 applyTemplate (p["base"].toString(), d.values, 0);
                 applyParamObject (p["params"], d.values);
+                readRegistrations (p["registrations"], d.registrations);
                 factoryPresets.push_back (std::move (d));
             }
         }
@@ -188,6 +218,7 @@ bool PresetManager::readJson (const juce::var& input, PresetData& d, juce::Strin
     }
     d.name = json["name"].toString().trim();
     d.category = json["category"].toString();
+    readRegistrations (json["registrations"], d.registrations);
     return true;
 }
 
@@ -227,6 +258,7 @@ juce::var PresetManager::toJson (const PresetData& d)
     root->setProperty ("name", d.name);
     root->setProperty ("category", d.category);
     root->setProperty ("params", juce::var (params));
+    root->setProperty ("registrations", registrationsToJson (d.registrations));
     return juce::var (root);
 }
 

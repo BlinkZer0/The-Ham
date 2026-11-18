@@ -79,7 +79,7 @@ target_link_libraries(TheHamVST
 # Console tests + engine tools:  --target TheHamTests
 # ---------------------------------------------------------------------------
 juce_add_console_app(TheHamTests PRODUCT_NAME "TheHamTests")
-target_sources(TheHamTests PRIVATE tests/PresetTests.cpp tests/OrganTests.cpp tests/EngineTools.cpp tests/HostCheck.cpp
+target_sources(TheHamTests PRIVATE tests/PresetTests.cpp tests/OrganTests.cpp tests/VoiceTests.cpp tests/CabinetTests.cpp tests/EngineTools.cpp tests/HostCheck.cpp
     Source/PresetManager.cpp)
 target_include_directories(TheHamTests PRIVATE Source)
 # JUCE_PLUGINHOST_VST3: --host-check loads the built .vst3 like a DAW would

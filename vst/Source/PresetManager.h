@@ -9,16 +9,52 @@
 //   - files carry a format version; older versions are migrated on load
 // ============================================================================
 #include "Params.h"
+#include "dsp/Wiring.h"
 #include <vector>
 
 namespace ham
 {
 constexpr int kPresetVersion = 1;
 
+// Fixed registrations of the preset keys C#..A: [manual 0 upper / 1 lower][key 0..8][footage]
+using Registrations = std::array<std::array<std::array<int, kNumFootages>, 9>, 2>;
+
+inline Registrations factoryRegistrations()
+{
+    Registrations r {};
+    for (int m = 0; m < 2; ++m)
+        for (int k = 0; k < 9; ++k)
+            for (int f = 0; f < kNumFootages; ++f) r[(size_t) m][(size_t) k][(size_t) f] = kFactoryRegistrations[k][f];
+    return r;
+}
+
+// "00 5320 000" <-> 9 values (spaces ignored; missing digits = 0). Returns false if not a registration.
+inline bool parseRegistration (const juce::String& text, std::array<int, kNumFootages>& out)
+{
+    const auto digits = text.removeCharacters (" -_.");
+    if (digits.isEmpty() || digits.length() > kNumFootages || ! digits.containsOnly ("012345678")) return false;
+    for (int f = 0; f < kNumFootages; ++f) out[(size_t) f] = f < digits.length() ? digits[f] - '0' : 0;
+    return true;
+}
+
+inline juce::String registrationString (const std::array<int, kNumFootages>& r)
+{
+    juce::String s;
+    for (int f = 0; f < kNumFootages; ++f)
+    {
+        if (f == 2 || f == 6) s << ' ';
+        s << juce::jlimit (0, 8, r[(size_t) f]);
+    }
+    return s;
+}
+
 struct PresetData
 {
     juce::String name, category;
     std::array<float, kNumParams> values; // NaN = not in preset -> parameter default
+    // Fixed preset-key registrations. A preset without them (all factory presets so far, files
+    // from before phase 2) gets the factory chart.
+    Registrations registrations = factoryRegistrations();
 
     PresetData() { values.fill (NAN); }
 };

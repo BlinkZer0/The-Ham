@@ -77,33 +77,59 @@ inline double b3TaperDb (int key, int foot)
         if (key < s->below) return s->db;
 }
 
-// Builds the wiring of one manual for an organ model. M-3 (phase 3) uses the B-3 chart until
-// its own tables are transcribed.
-inline void buildManualWiring (std::array<KeyWiring, kMaxKeys>& w, int /*organModel*/)
+// Organ models: 0 B-3, 1 C-3 (the same instrument in a churchier case), 2 A-100 (the B-3
+// voice with a built-in amp, speakers and reverb), 3 M-3 spinet.
+//
+// M-3: two 44-key manuals (F..C: keys 5..48 of the 61-key frame here), no 16' on the lower
+// manual, 13 pedals. Its generator is the A-based one (setBfree TG_82FB09: lowest wheel 10,
+// footages below it fold up an octave). No taper data was found, so its manuals are untapered
+// (0 dB) - an approximation, like the rest of this model.
+constexpr int kM3FirstKey = 5, kM3LastKey = 48, kM3Pedals = 13;
+
+inline int m3ManualWheel (int key, int foot)
 {
+    int t = key + 13 + kFootageOffset[foot];
+    while (t < 10) t += 12;
+    while (t > kNumWheels) t -= 12;
+    return t;
+}
+
+// Builds the wiring of one manual (0 upper, 1 lower) for an organ model.
+inline void buildManualWiring (std::array<KeyWiring, kMaxKeys>& w, int organModel, int manual = 0)
+{
+    const bool m3 = organModel == 3;
     for (int k = 0; k < kMaxKeys; ++k)
     {
         auto& kw = w[(size_t) k];
         kw = {};
+        if (m3)
+        {
+            if (k < kM3FirstKey || k > kM3LastKey) continue;   // the spinet's keyboard is shorter
+            for (int f = manual == 1 ? 1 : 0; f < kContacts; ++f)
+                kw.c[(size_t) kw.count++] = { m3ManualWheel (k, f), f, 1.0 };
+            continue;
+        }
         for (int f = 0; f < kContacts; ++f)
             kw.c[(size_t) f] = { b3ManualWheel (k, f), f, dbToGain (b3TaperDb (k, f)) };
         kw.count = kContacts;
     }
 }
 
-inline void buildPedalWiring (std::array<KeyWiring, kMaxKeys>& w)
+inline void buildPedalWiring (std::array<KeyWiring, kMaxKeys>& w, int organModel = 0)
 {
+    const bool m3 = organModel == 3;
+    auto wheel = [m3] (int t) { if (m3) while (t < 10) t += 12; return t; };
     for (int k = 0; k < kMaxKeys; ++k)
     {
         auto& kw = w[(size_t) k];
         kw = {};
-        if (k >= kPedalKeys) continue;
-        kw.c[0] = { k + 1,  0, 1.0 };
-        kw.c[1] = { k + 13, 0, 0.35 };
-        kw.c[2] = { k + 20, 0, 0.15 };
-        kw.c[3] = { k + 13, 1, 1.0 };
-        kw.c[4] = { k + 25, 1, 0.30 };
-        kw.c[5] = { k + 32, 1, 0.12 };
+        if (k >= (m3 ? kM3Pedals : kPedalKeys)) continue;
+        kw.c[0] = { wheel (k + 1),  0, 1.0 };
+        kw.c[1] = { wheel (k + 13), 0, 0.35 };
+        kw.c[2] = { wheel (k + 20), 0, 0.15 };
+        kw.c[3] = { wheel (k + 13), 1, 1.0 };
+        kw.c[4] = { wheel (k + 25), 1, 0.30 };
+        kw.c[5] = { wheel (k + 32), 1, 0.12 };
         kw.count = 6;
     }
 }

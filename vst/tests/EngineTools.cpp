@@ -182,6 +182,13 @@ int runBench()
     auto v = defaultValues();
     for (int m = 0; m < 2; ++m) for (int s = 0; s < 2; ++s) setBars (v, m, s, "888888888");
     v[pd16] = 8; v[pd8] = 8;
+    // phase 2: percussion, both manuals through the scanner (chorus), leakage and Age at full, sustain
+    v[percOn] = 1; v[vibUpper] = 1; v[vibLower] = 1; v[vibMode] = 5;
+    v[leakUp] = v[leakLo] = v[ageUp] = v[ageLo] = 1;
+    v[pedSustain] = 1; v[loSustain] = 1; v[clickUp] = v[clickLo] = 1;
+    // phase 3: Fast rotors, 4x amp, dual active horns, 3-mic layout + room mic, every pedal, reverb
+    v[speed] = 2; v[ampOS] = 2; v[drive] = 0.7f; v[hornType] = 1; v[micLayout] = 3; v[micRoom] = 1;
+    v[odOn] = 1; v[wahOn] = 1; v[echoOn] = 1; v[revOn] = 1;
     std::vector<Event> ev;
     for (int m = 0; m < 3; ++m)
         for (int k = 0; k < SynthEngine::keyCount (m); ++k) ev.push_back ({ sec (0.01) + k * 7, Event::Key, k, 100.0, m });
@@ -189,7 +196,7 @@ int runBench()
     const auto t0 = juce::Time::getMillisecondCounterHiRes();
     const auto a = render (v, ev, seconds);
     const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
-    std::printf ("bench: 61 + 61 + 25 keys held, all drawbars: %.1f%% of one core (%.0f ms for %.0f s of audio), peak %.2f\n",
+    std::printf ("bench: 61 + 61 + 25 keys held, all drawbars, percussion, scanner on both manuals, leakage + Age 100%%, Fast rotors, 4x amp, dual horns, 3 mics + room, overdrive + wah + echo + reverb: %.1f%% of one core (%.0f ms for %.0f s of audio), peak %.2f\n",
                  100.0 * ms / (seconds * 1000.0), ms, seconds, peak (a));
 
     // one key only, for comparison (the generator always runs)

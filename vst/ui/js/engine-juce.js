@@ -11,7 +11,7 @@ class JuceEngine {
     this.connected = !!this.backend;
     this.handlers = {};
     if (this.backend) {
-      for (const ev of ['params', 'notes', 'stats', 'config', 'presetList', 'preset', 'saveResult', 'message', 'midiInputs', 'rotor']) {
+      for (const ev of ['params', 'notes', 'stats', 'config', 'presetList', 'preset', 'saveResult', 'message', 'midiInputs', 'rotor', 'registrations', 'learn']) {
         this.backend.addEventListener(ev, (data) => { if (this.handlers[ev]) this.handlers[ev](data); });
       }
     }
@@ -31,6 +31,18 @@ class JuceEngine {
   noteOn(manual, key, vel) { this.emit('noteOn', { manual, key, vel }); }
   noteOff(manual, key) { this.emit('noteOff', { manual, key }); }
   panic() { this.emit('panic'); }
+  expression(value) { this.emit('expression', { value }); }   // on-screen expression pedal 0..1
+
+  // fixed registrations of the preset keys C#..A (key 0..8), e.g. bars = "00 5320 000"
+  setRegistration(manual, key, bars) { this.emit('setRegistration', { manual, key, bars }); }
+
+  // MIDI learn: arm a parameter (the next CC moved is assigned to it), forget it, or cancel
+  midiLearn(id) { this.emit('midiLearn', { id }); }
+  midiForget(id) { this.emit('midiForget', { id }); }
+  learnCancel() { this.emit('learnCancel'); }
+
+  // pick a cabinet model: the host sets it and loads its defaults (speeds, ramps, rotors, baffle, crossover, mics)
+  cabinetModel(model) { this.emit('cabinetModel', { model }); }
 
   // right-click on a control -> the host's parameter menu (automation, MIDI learn...)
   paramMenu(id, x, y) { this.emit('paramMenu', { id, x: Math.round(x), y: Math.round(y) }); }

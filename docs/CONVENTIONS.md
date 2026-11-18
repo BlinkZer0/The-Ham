@@ -89,10 +89,11 @@ Rules:
   with bounce (a few on/off flips over 1–4 ms, from the seeded `Rng`). The render loop splits at contact events,
   the same way the processor already splits a block at MIDI events. Everything else, including drawbar moves,
   stays on 32-sample ramps. This is the deliberate key click from the brief, and the only intended step.
-- **Oversampling latency.** The cabinet amp at 2× uses polyphase IIR half-band filters (minimum phase, so no whole
-  sample of latency is reported). At 4× it uses Brass Knuckles' linear-phase FIR half-bands, and the processor
-  reports that latency to the host with `setLatencySamples`. At 1× and 2× the plugin reports 0. This satisfies the
-  brief's "zero added latency unless 4×".
+- **Oversampling latency** (as built in phase 3; changed from the plan). The cabinet amp uses polyphase IIR half-band
+  filters at both 2× and 4×. Their small delay is measured by the tests and reported to the host with
+  `setLatencySamples`: 1× = 0, 2× = 3, 4× = 4 samples. The plan had 2× at "no whole sample" and Brass Knuckles' FIR
+  at 4× (about 30 samples), but any 2× filter delays a few samples, and the IIR 4× path is both shorter and alias-free
+  enough (−78 dB measured).
 - Model data lives in tables, one header each: `dsp/Tonewheels.h` (gear train and voicing), `dsp/Wiring.h`
   (key-to-wheel charts per organ model), `dsp/Cabinets.h` (cabinet models), `dsp/Registrations.h` (preset keys).
   This is Brass Knuckles' `Instruments.h` pattern, split up because there are four kinds of model.
@@ -141,9 +142,12 @@ Inherited unchanged. `ui/js/engine-juce.js` wraps `window.__JUCE__.backend` in a
 - **`rotor {hornAngle, drumAngle, hornHz, drumHz}`** is sent on **every** 30 Hz tick while a rotor moves, not only
   on change, because the UI extrapolates from the latest event. Angles are in turns (0–1). The UI interpolates with
   `requestAnimationFrame`.
-- New events: UI → host `presetKey {manual,key}`, `setRegistration {manual,key,bars}`, `midiLearn {id}` /
-  `midiForget {id}`, `motor {start,run}`. Host → UI `motor {wheelSpeed}` (0–1, for the pitch-dive display),
-  `learn {id,cc}`, and `stats` grows `expression`, `speed` (stop/slow/fast) and `percArmed`.
+- New events (as built): UI → host `expression {value}`, `setRegistration {manual,key,bars}`, `midiLearn {id}`,
+  `midiForget {id}`, `learnCancel`. Host → UI `registrations {upper[9],lower[9]}`, `learn {armed,map{id:cc}}`.
+  `stats` carries `peak, sustain, modWheel, expression, motor, perc` (`speed` arrives with the cabinet). The preset
+  keys and the motor switches are ordinary parameters (`upKey`, `loKey`, `motorStart`, `motorRun`), so they need no
+  events of their own. Phase 3 adds UI → host `cabinetModel {model}` (sets the model and loads its defaults) and host → UI
+  `rotor {hornAngle, drumAngle, hornHz, drumHz}` and `stats.speed`.
 
 ## 6. UI code
 
@@ -181,9 +185,13 @@ Inherited unchanged. `ui/js/engine-juce.js` wraps `window.__JUCE__.backend` in a
   `hamMigratePreset` (JS) bring old versions up to date, as in Brass Knuckles.
 - Factory presets are also host programs (`"<Category> - <Name>"`).
 
-**The Ham:** 50 presets (5 categories × 10). The file adds the optional blocks `"registrations"` (preset keys per
-manual) and `"cc"` (MIDI learn). Neither is required: a preset without them leaves the current ones unchanged.
-Drawbar values are written as integers.
+**The Ham:** 50 presets (5 categories × 10). The file adds an optional `"registrations"` block: the fixed
+preset-key registrations C♯–A per manual, `{ "upper": ["00 5320 000", …9], "lower": […] }`. A preset without it,
+or with an entry that isn't a registration, gets the factory chart for those keys. Drawbar values are written as
+integers.
+MIDI learn is **not** stored in presets (changed in phase 2 from the original plan of a `"cc"` block). It describes the
+player's hardware, not the sound, so it lives in the project state (`midiLearn`, as `cc=paramId;…`) and survives
+preset changes.
 
 ## 8. Web build
 

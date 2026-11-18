@@ -40,6 +40,28 @@ EngineParams makeEngineParams (GetValue&& get)
     p.click[2]   = num (clickPd);
     p.keyUpClick = on (keyUpClick);
 
+    p.percOn       = on (percOn);
+    p.percSoft     = choice (percVol, 1) == 1;
+    p.percSlow     = choice (percDecay, 1) == 1;
+    p.percThird    = choice (percHarm, 1) == 1;
+    p.percFastTime = num (percFast);
+    p.percSlowTime = num (percSlow);
+    p.vibUpper     = on (vibUpper);
+    p.vibLower     = on (vibLower);
+    p.vibMode      = choice (vibMode, 5);
+    p.leak[0]      = num (leakUp);
+    p.leak[1]      = num (leakLo);
+    p.age[0]       = num (ageUp);
+    p.age[1]       = num (ageLo);
+    p.pedTone      = num (pedTone);
+    p.pedSustain   = on (pedSustain);
+    p.pedDecay     = num (pedDecay);
+    p.loSustain    = on (loSustain);
+    p.loSusTime    = num (loSusTime);
+    p.manualBass   = on (manualBass);
+    // p.regs (fixed preset-key registrations) are not parameters: the processor fills them
+    // from its state; the default is the factory chart.
+
     p.channel[0] = inum (chUpper) - 1;
     p.channel[1] = inum (chLower) - 1;
     p.channel[2] = inum (chPedal) - 1;
@@ -51,6 +73,49 @@ EngineParams makeEngineParams (GetValue&& get)
     p.pedMidiBase = inum (pedMidiBase);
     p.motorCC    = inum (motorCC);
     p.exprCC     = inum (exprCC);
+
+    p.speedWheel   = choice (speedWheel, 2);
+    p.speedCC      = inum (speedCC);
+    p.speedSustain = on (speedSustain);
+    p.varSource    = choice (varSource, 2);
+
+    p.drive       = num (drive);
+    p.cabModel    = choice (cabModel, 3);
+    p.cabBypass   = on (cabBypass);
+    p.rotorConfig = choice (rotorConfig, 3);
+    p.speedMode   = choice (speedMode, 2);
+    p.speed       = choice (speed, 2);
+    p.hornSel     = choice (hornSpeedSel, 3);
+    p.drumSel     = choice (drumSpeedSel, 3);
+    p.drumOff     = on (drumOff);
+    p.hornSlow    = num (hornSlow);  p.hornFast  = num (hornFast);
+    p.hornAccel   = num (hornAccel); p.hornBrake = num (hornBrake);
+    p.drumSlow    = num (drumSlow);  p.drumFast  = num (drumFast);
+    p.drumAccel   = num (drumAccel); p.drumBrake = num (drumBrake);
+    p.hornDir     = choice (hornDir, 1);
+    p.drumDir     = choice (drumDir, 1);
+    p.brakePos    = on (brakePos);
+    p.brakeAngle  = num (brakeAngle);
+    p.hornType    = choice (hornType, 1);
+    p.hornMouth   = choice (hornMouth, 1);
+    p.drumBaffle  = choice (drumBaffle, 2);
+    p.xover       = num (xover);
+    p.hornDrumBal = num (hornDrumBal);
+    p.cabBack     = choice (cabBack, 1);
+    p.micLayout   = choice (micLayout, 4);
+    p.micDist     = num (micDist);
+    p.micAngle    = num (micAngle);
+    p.micHorn     = num (micHorn);
+    p.micDrum     = num (micDrum);
+    p.micRoom     = num (micRoom);
+    p.ampOS       = choice (ampOS, 2);
+    p.width       = num (width);
+
+    p.odOn     = on (odOn);   p.odDrive = num (odDrive); p.odTone = num (odTone); p.odLevel = num (odLevel);
+    p.wahOn    = on (wahOn);  p.wahPos  = num (wahPos);  p.wahSrc = choice (wahSrc, 3); p.wahCC = inum (wahCC);
+    p.echoOn   = on (echoOn); p.echoTime = num (echoTime); p.echoFb = num (echoFb); p.echoMix = num (echoMix);
+    p.echoWow  = num (echoWow); p.echoTone = num (echoTone);
+    p.revOn    = on (revOn);  p.revMix = num (revMix); p.revDecay = num (revDecay); p.revTone = num (revTone);
     return p;
 }
 } // namespace ham

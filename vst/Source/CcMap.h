@@ -35,4 +35,20 @@ inline CcTarget drawbarForCC (int map, int cc)
     }
     return {};
 }
+
+// Preset keys as keyswitches (Preset Keyswitches on): MIDI notes 24-35 (C1..B1) on a manual's
+// channel press that manual's preset key 0..11, as the reverse-coloured octave does. Off in Split
+// mode (the bottom of the one keyboard plays the lower manual or the pedals there).
+struct KeyswitchTarget { int manual = -1; int key = -1; };
+
+inline KeyswitchTarget presetKeyswitch (int note, int ch, bool ksOn, bool splitMode, int chUpper, int chLower)
+{
+    if (! ksOn || splitMode || note < 24 || note > 35) return {};
+    if (ch == chUpper) return { 0, note - 24 };
+    if (ch == chLower) return { 1, note - 24 };
+    return {};
+}
+
+// MIDI learn: controllers that can't be learned (bank select, sustain, channel mode messages).
+inline bool learnableCC (int cc) { return cc != 0 && cc != 32 && cc != 64 && cc < 120; }
 } // namespace ham

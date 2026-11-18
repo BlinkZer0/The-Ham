@@ -246,10 +246,10 @@
   // ------------------------------------------------------------- pages -----
   const PAGE_HINTS = {
     drawbars: 'Upper and lower manuals: drawbar sets A (A# key) and B (B key) · pedals 16\' and 8\'',
-    voice: 'Key click is live now · percussion, scanner vibrato, leakage, age and the preamp arrive in phase 2',
-    cabinet: 'Rotary cabinets arrive in phase 3 (the settings are stored with presets already)',
+    voice: 'Percussion: set B, single trigger · scanner V1-V3 / C1-C3 per manual · leakage and Age per manual · Drive into the cabinet amp',
+    cabinet: 'Picking a cabinet loads its speeds, rotors and mics · every option stays editable · mod wheel above the middle = Fast',
     play: 'Organ model, tuning, motor · MIDI channels (upper 1, lower 2, pedals 3) or Split · drawbar CC maps',
-    fx: 'Overdrive -> wah -> tape echo before the cabinet, spring reverb after it (phase 3)',
+    fx: 'Overdrive -> wah -> tape echo before the cabinet (the classic rock chain), spring reverb after it',
   };
   let activePage = location.hash.slice(1) || store.get('ham.page') || 'drawbars'; // #voice opens a page directly (tests)
   function showPage(name) {
@@ -332,13 +332,64 @@
       }
       pedal.renderString();
     });
+
+    // Fixed registrations of the preset keys C#..A: editable, saved with the project and in presets
+    const regBox = el('section', 'reg-editor');
+    const regInputs = [[], []];
+    const KEY_NAMES = ['C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A'];
+    ['UPPER', 'LOWER'].forEach((title, m) => {
+      const row = el('div', 'reg-row', `<span class="reg-row-title">${title} PRESET KEYS</span>`);
+      KEY_NAMES.forEach((name, k) => {
+        const cell = el('label', 'reg-cell', `<span class="reg-key">${name}</span>`);
+        const input = el('input', 'reg-input small-reg');
+        input.type = 'text'; input.spellcheck = false; input.maxLength = 13;
+        input.title = `${title.toLowerCase()} manual, preset key ${name}: type nine digits 0-8 and press Enter`;
+        const commit = () => {
+          const regs = parseRegistration(input.value);
+          if (!regs) { input.classList.add('bad'); return; }
+          input.classList.remove('bad');
+          input.value = registrationString(regs);
+          engine.setRegistration(m, k, input.value);
+          input.blur();
+        };
+        input.addEventListener('keydown', (e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          else if (e.key === 'Escape') { e.preventDefault(); input.value = input.dataset.v || ''; input.blur(); }
+        });
+        input.addEventListener('keyup', (e) => e.stopPropagation());
+        input.addEventListener('change', commit);
+        input.addEventListener('focus', () => input.select());
+        cell.appendChild(input);
+        row.appendChild(cell);
+        regInputs[m].push({ cell, input });
+      });
+      regBox.appendChild(row);
+    });
+    $('#db-stage').after(regBox);
+    engine.on('registrations', ({ upper, lower }) => {
+      [upper, lower].forEach((list, m) => list.forEach((text, k) => {
+        const { input } = regInputs[m][k];
+        input.dataset.v = text;
+        if (document.activeElement !== input) { input.value = text; input.classList.remove('bad'); }
+      }));
+    });
+    refreshers.push((ids) => {
+      if (ids && !ids.has('upKey') && !ids.has('loKey')) return;
+      [values.upKey, values.loKey].forEach((pk, m) =>
+        regInputs[m].forEach(({ cell }, k) => cell.classList.toggle('active', Math.round(pk) === k + 1)));
+    });
   }
 
   // ========================================================= VOICE page ====
+  let percLamp = null;
   {
     const r1 = $('#voice-row-1'), r2 = $('#voice-row-2');
     {
-      const p = makePanel('PERCUSSION', control(ToggleButton, 'percOn'), 2);
+      const lamp = el('span', 'led perc-lamp');
+      lamp.title = 'Percussion envelope';
+      const p = makePanel('PERCUSSION', [lamp, control(ToggleButton, 'percOn')]);
+      percLamp = lamp;
       const sw = el('div', 'switch-row');
       sw.appendChild(control(Segmented, 'percVol').el);
       sw.appendChild(control(Segmented, 'percDecay').el);
@@ -350,13 +401,13 @@
       r1.appendChild(p);
     }
     {
-      const p = makePanel('VIBRATO · CHORUS', null, 2);
+      const p = makePanel('VIBRATO · CHORUS');
       const sw = el('div', 'switch-row left');
       sw.appendChild(control(ToggleButton, 'vibUpper', 'UPPER').el);
       sw.appendChild(control(ToggleButton, 'vibLower', 'LOWER').el);
       p.appendChild(sw);
       p.appendChild(control(Segmented, 'vibMode').el);
-      p.appendChild(el('div', 'panel-note', 'Scanner on a multi-tap LC line (about 6.9 Hz) · V = scanned, C = scanned + dry'));
+      p.appendChild(el('div', 'panel-note', 'A scanner reads an 18-section delay line at 6.9 Hz · V = scanned, C = scanned + straight · percussion and pedals bypass it'));
       r1.appendChild(p);
     }
     {
@@ -366,7 +417,7 @@
       r1.appendChild(p);
     }
     {
-      const p = makePanel('PEDALS · SUSTAIN', null, 2);
+      const p = makePanel('PEDALS · SUSTAIN');
       knobRow(p, ['pedTone', 'pedDecay', 'loSusTime']);
       const sw = el('div', 'switch-row left');
       sw.appendChild(control(ToggleButton, 'pedSustain', 'PEDAL SUS').el);
@@ -376,8 +427,9 @@
       r2.appendChild(p);
     }
     {
-      const p = makePanel('LEAKAGE · AGE · PREAMP', null, 2);
+      const p = makePanel('LEAKAGE · AGE · DRIVE');
       knobRow(p, ['leakUp', 'leakLo', 'ageUp', 'ageLo', 'drive']);
+      p.appendChild(el('div', 'panel-note', 'Leakage: neighbouring wheels bleed in (and a quiet floor of all of them). Age: uneven levels, more harmonics, more leakage. <b>Drive</b>: into the cabinet\'s tube amp.'));
       r2.appendChild(p);
     }
     refreshers.push(() => {
@@ -389,14 +441,25 @@
   {
     const r1 = $('#cab-row-1'), r2 = $('#cab-row-2');
     {
-      const p = makePanel('CABINET', control(ToggleButton, 'cabBypass', 'BYPASS'), 3);
-      fields(p, [['Model', control(SelectBox, 'cabModel')], ['Rotors', control(SelectBox, 'rotorConfig')]]);
+      const p = makePanel('CABINET', control(ToggleButton, 'cabBypass', 'BYPASS'));
+      // picking a model asks the host to load its defaults too
+      const model = new SelectBox(PARAM_BY_ID.cabModel, values.cabModel, (v) => {
+        lastLocal.cabModel = performance.now(); applyValue('cabModel', v); engine.cabinetModel(v);
+        presetDirty = true; renderPresetName(); refresh(new Set(['cabModel']));
+      });
+      model.el.dataset.param = 'cabModel';
+      (bound.cabModel = bound.cabModel || []).push(model);
+      fields(p, [['Model', model], ['Rotors', control(SelectBox, 'rotorConfig')]]);
       p.appendChild(control(Segmented, 'speed').el);
       p.appendChild(control(Segmented, 'speedMode').el);
+      const lamps = el('div', 'speed-lamps', ['STOP', 'SLOW', 'FAST'].map((t, i) => `<span class="speed-lamp" data-s="${i}"><span class="led"></span>${t}</span>`).join('')
+        + '<span class="rpm" id="rpm-readout">—</span>');
+      lamps.title = 'The speed the rotors are heading for (from the switch, the mod wheel, a CC or the sustain pedal)';
+      p.appendChild(lamps);
       r1.appendChild(p);
     }
     {
-      const p = makePanel('HORN', null, 3);
+      const p = makePanel('HORN');
       knobRow(p, ['hornSlow', 'hornFast', 'hornAccel', 'hornBrake', 'brakeAngle']);
       fields(p, [['Speed', control(SelectBox, 'hornSpeedSel')], ['Direction', control(Segmented, 'hornDir')],
                  ['Horns', control(SelectBox, 'hornType')], ['Mouth', control(Segmented, 'hornMouth')]]);
@@ -406,26 +469,26 @@
       r1.appendChild(p);
     }
     {
-      const p = makePanel('DRUM', control(ToggleButton, 'drumOff', 'DRUM OFF'), 3);
+      const p = makePanel('DRUM', control(ToggleButton, 'drumOff', 'DRUM OFF'));
       knobRow(p, ['drumSlow', 'drumFast', 'drumAccel', 'drumBrake']);
       fields(p, [['Speed', control(SelectBox, 'drumSpeedSel')], ['Direction', control(Segmented, 'drumDir')],
                  ['Baffle', control(Segmented, 'drumBaffle')]]);
       r1.appendChild(p);
     }
     {
-      const p = makePanel('SPEAKERS', null, 3);
+      const p = makePanel('SPEAKERS');
       knobRow(p, ['xover', 'hornDrumBal']);
       fields(p, [['Back', control(Segmented, 'cabBack')], ['Amp OS', control(Segmented, 'ampOS')]]);
       r2.appendChild(p);
     }
     {
-      const p = makePanel('MICS', null, 3);
+      const p = makePanel('MICS');
       p.appendChild(control(Segmented, 'micLayout').el);
       knobRow(p, ['micDist', 'micAngle', 'micHorn', 'micDrum', 'micRoom', 'width']);
       r2.appendChild(p);
     }
     {
-      const p = makePanel('SPEED CONTROL', null, 3);
+      const p = makePanel('SPEED CONTROL');
       fields(p, [['Mod Wheel', control(Segmented, 'speedWheel', ['Off', 'Half', 'Mom.'])], ['Variable', control(SelectBox, 'varSource')]]);
       knobRow(p, ['speedCC']);
       const sw = el('div', 'switch-row left');
@@ -492,7 +555,7 @@
   {
     const r1 = $('#fx-row-1');
     const fx = (title, onId, ids, extra) => {
-      const p = makePanel(title, control(ToggleButton, onId), 3);
+      const p = makePanel(title, control(ToggleButton, onId));
       knobRow(p, ids);
       if (extra) extra(p);
       onOff(p, onId);
@@ -589,11 +652,70 @@
     logMidi('PANIC: all keys released');
   });
 
+  // ------------------------------------------------- expression pedal ------
+  let exprDragging = false;
+  const exprPedal = new ModWheel((v) => engine.expression(v), (b) => { exprDragging = b; }, 'EXPR', 'Expression pedal');
+  exprPedal.el.title = 'Expression (swell) pedal: also follows CC11 (or the Expression CC). Closing it cuts the mids and treble more than the bass.';
+  exprPedal.setValue(1);
+  $('#expr-slot').replaceWith(exprPedal.el);
+  exprPedal.svg.addEventListener('dblclick', () => { exprPedal.set(1, true); });
+
+  // ----------------------------------------------------------- MIDI learn ------
+  // LEARN on: click a control to arm it, then move a knob or fader on your controller.
+  // Right-click a control (in learn mode) to forget its CC. Esc or LEARN again: leave.
+  let learnMode = false, learnArmed = '', learnMap = {};
+  const learnBtn = $('#learn-btn');
+  function setLearnMode(on) {
+    learnMode = on;
+    document.body.classList.toggle('learning', on);
+    learnBtn.classList.toggle('on', on);
+    if (!on && learnArmed) engine.learnCancel();
+    logMidi(on ? 'MIDI LEARN: click a control, then move a knob / fader on your controller · right-click = forget · Esc = done' : 'MIDI learn off');
+  }
+  learnBtn.addEventListener('click', () => setLearnMode(!learnMode));
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && learnMode) setLearnMode(false); });
+  document.addEventListener('pointerdown', (e) => {
+    if (!learnMode || e.target.closest('#learn-btn')) return;
+    const ctl = e.target.closest('[data-param]');
+    if (!ctl) return;
+    e.preventDefault(); e.stopPropagation();
+    if (e.button === 2) { engine.midiForget(ctl.dataset.param); return; }
+    engine.midiLearn(ctl.dataset.param);
+  }, true);
+  engine.on('learn', ({ armed, map }) => {
+    if (learnArmed && !armed && map[learnArmed] !== undefined)
+      logMidi(`Learned: CC ${map[learnArmed]} → ${PARAM_BY_ID[learnArmed].name}`);
+    learnArmed = armed;
+    learnMap = map;
+    document.querySelectorAll('[data-param]').forEach(n => {
+      const id = n.dataset.param;
+      n.classList.toggle('learn-armed', id === armed);
+      n.classList.toggle('learned', map[id] !== undefined);
+      if (map[id] !== undefined) n.dataset.cc = `CC ${map[id]}`; else delete n.dataset.cc;
+    });
+    if (armed) logMidi(`MIDI LEARN: move a controller for ${PARAM_BY_ID[armed].name}…`);
+  });
+
+  // rotors: rpm readout (the animated cabinet drawing comes in phase 4)
+  const rpmEl = $('#rpm-readout');
+  engine.on('rotor', ({ hornHz, drumHz }) => {
+    if (rpmEl) rpmEl.textContent = `HORN ${Math.round(hornHz * 60)} · DRUM ${Math.round(drumHz * 60)} rpm`;
+  });
+
   // ------------------------------------------------------------- stats -----
   const sustainLed = $('#sustain-led'), exprMini = $('#expr-mini'), motorLed = $('#motor-led');
   engine.on('stats', (s) => {
     sustainLed.classList.toggle('on', !!s.sustain);
-    if (typeof s.expression === 'number') exprMini.style.width = `${clamp(s.expression, 0, 1) * 100}%`;
+    if (typeof s.expression === 'number') {
+      exprMini.style.width = `${clamp(s.expression, 0, 1) * 100}%`;
+      if (!exprDragging) exprPedal.setValue(s.expression);
+    }
+    if (typeof s.speed === 'number')
+      document.querySelectorAll('.speed-lamp').forEach(l => l.classList.toggle('on', Number(l.dataset.s) === s.speed));
+    if (typeof s.perc === 'number' && percLamp) {
+      percLamp.classList.toggle('on', s.perc > 0.02 && values.percOn >= 0.5);
+      percLamp.style.opacity = values.percOn >= 0.5 ? String(0.3 + 0.7 * clamp(s.perc * 3, 0, 1)) : '';
+    }
     if (typeof s.motor === 'number') {
       motorLed.classList.toggle('on', s.motor > 0.995);
       motorLed.style.opacity = s.motor > 0.995 ? '' : String(0.35 + 0.65 * s.motor);
@@ -640,6 +762,7 @@
   document.addEventListener('contextmenu', (e) => {
     if (!engine.connected || e.shiftKey) return;
     e.preventDefault();
+    if (learnMode) return;
     const ctl = e.target.closest('[data-param]');
     if (ctl) engine.paramMenu(ctl.dataset.param, e.clientX, e.clientY);
   });

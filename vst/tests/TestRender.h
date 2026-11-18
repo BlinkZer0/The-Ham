@@ -171,6 +171,54 @@ inline double hfEnergy (const Audio& a, int from, int to)
     return acc;
 }
 
+// Amplitude of the component at f Hz in [from, from + n) (Hann-windowed single-bin DFT, scaled so
+// a sine of amplitude A reads A).
+inline double toneAmplitude (const Audio& a, int from, int n, double f)
+{
+    double re = 0, im = 0, wsum = 0;
+    const double w = kTwoPi * f / kSr;
+    for (int i = 0; i < n; ++i)
+    {
+        const double win = 0.5 - 0.5 * std::cos (kTwoPi * i / (n - 1));
+        const double x = a.L[(size_t) (from + i)] * win;
+        re += x * std::cos (w * i);
+        im -= x * std::sin (w * i);
+        wsum += win;
+    }
+    return 2.0 * std::sqrt (re * re + im * im) / wsum;
+}
+
+// Spectral centroid (Hz) of [from, from + n), amplitude-weighted, by a DFT on a 10 Hz grid to 8 kHz.
+inline double spectralCentroid (const Audio& a, int from, int n)
+{
+    double num = 0, den = 0;
+    for (double f = 20; f <= 8000; f += 10)
+    {
+        const double m = toneAmplitude (a, from, n, f);
+        num += f * m; den += m;
+    }
+    return den > 0 ? num / den : 0.0;
+}
+
+// Instantaneous frequency of a steady single tone from its upward zero crossings (linear
+// interpolation between samples). Returns the frequency of each period.
+inline std::vector<double> periodFrequencies (const Audio& a, int from, int to)
+{
+    std::vector<double> f;
+    double last = -1;
+    for (int i = std::max (1, from); i < std::min (a.size(), to); ++i)
+    {
+        const double y0 = a.L[(size_t) i - 1], y1 = a.L[(size_t) i];
+        if (y0 < 0 && y1 >= 0)
+        {
+            const double t = (i - 1) + y0 / (y0 - y1);
+            if (last >= 0) f.push_back (kSr / (t - last));
+            last = t;
+        }
+    }
+    return f;
+}
+
 inline bool writeWav (const juce::File& f, const Audio& a)
 {
     f.deleteFile();

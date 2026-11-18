@@ -22,7 +22,7 @@ is reused.
   device and MIDI input
 - `...\build\TheHamTests_artefacts\Release\TheHamTests.exe`
 
-## Signal flow (phase 1)
+## Signal flow (phase 3)
 
 ```
 motor (Start / Run, 60/50 Hz mains, tuning A, pitch dive; evaluated every 32 samples)
@@ -34,7 +34,28 @@ keys (MIDI channel per manual or Split; on-screen keyboards direct)
      contact events sit in a binary heap and are applied at their exact sample
   -> busbars: busG[manual][bus][wheel] += contact level x taper      (changes only at contact events)
   -> drawbars of the active registration (preset key: cancel / fixed / set A / set B), ramped over 32 samples
-  -> sum of 3 manuals x 0.06 x patch level x master (smoothed) -> safety clip (linear below -1.9 dBFS) -> L = R
+     + leakage: busLeak[manual][bus][wheel] (compartment partner on the same busbar, the same wheel on the
+       neighbouring busbars at half) x Leak x (1 + Age); + a floor of every wheel (-66 dB each at Leak 100%)
+  upper (+ floor) --+-- Vibrato Upper --> scanner: 18 all-pass sections (taps 0..18), rotor 6.87 Hz x mains x motor,
+  lower (+ floor) --+-- Vibrato Lower -->   position = depth x (1 - cos) / 2, adjacent taps blended; 6.5 kHz low-pass;
+                                            V = scanned, C = (scanned + straight) / 2; depth V1 / V2 / V3 = 6 / 12 / 18
+  upper busbar 4' (Second) or 2 2/3' (Third) x percussion envelope (-60 dB over Fast / Slow; restarts only when no
+       upper key was held; set B only; takes the 1' busbar; Normal = upper drawbars x 0.605, Soft = x 0.501)
+  pedals -> pedal tone low-pass (120 Hz .. 1.9 kHz)
+  -> sum -> preamp: bands at 200 Hz / 2.5 kHz, expression closed = bass -14 / mids -26 / treble -32 dB
+  -> outboard (each optional, crossfaded): overdrive (ADAA, 0..36 dB) -> wah (TPT band-pass) -> tape echo
+  -> cabinet (or Bypass): tube amp (Drive; ADAA 1x / 2x / 4x with IIR half-bands; level-matched over ~300 ms)
+     -> Linkwitz-Riley crossover -> horn / drum delay lines (drum through the box resonance)
+     -> pickups per mic: direct + back wall + side wall; Doppler (radius (1 - c) / 343 m/s), directional low-pass,
+        AM 1 - d + d ((1 + c) / 2)^n; dual horns at +180 degrees; room mic: two late dark pickups -> L, R
+  -> spring reverb (4 dispersive springs; built into Tone Cabinet / A-100) -> width (M/S)
+  -> x 0.06 x patch level x master (smoothed) -> safety clip (linear below -1.9 dBFS) -> L, R
+The analog stages run at kStage = 0.06 per full drawbar on one key (a full-organ chord is ~15x that).
+Rotors: speed toward the target with tau from the Accel / Brake times (= time to within 2% of the new speed);
+horn brake-to-angle below 0.4 Hz; angles and speeds go to the UI as `rotor` events.
+Age: contact levels +-3 dB and wheel levels +-2 dB (fixed random pattern) x Age, 2nd / 3rd harmonics on wheels <= 63.
+Sustain (pedals, lower): a released key's contacts fade exponentially to -60 dB over the sustain time.
+Manual bass: the lowest held lower key also holds its pedal.
 ```
 
 There is no voice allocation: the cost is the 91 wheels plus one dot product per busbar that has a closed contact.
@@ -46,8 +67,14 @@ There is no voice allocation: the cost is the 91 wheels plus one dot product per
 - **Right-click any control** for the host's parameter menu. The Standalone app gets a small fallback menu with
   *Reset to default*. Shift+right-click opens DevTools.
 - MIDI: notes on channels 1 / 2 / 3 (upper / lower / pedals, settable) or Split; drawbar CCs (map on the PLAY · MIDI
-  page); expression (CC11 or the Expression CC; used from phase 2); sustain (CC64, phase 2); Motor Off CC (≥ 64 = off);
-  all notes / sound off. Events are applied at the exact sample they arrive.
+  page); expression (CC11 or the Expression CC); Motor Off CC (≥ 64 = off); preset-key keyswitches (MIDI 24–35, when on);
+  MIDI-learned CCs (they win over the drawbar maps); all notes / sound off. Events are applied at the exact sample
+  they arrive. Learned CCs and keyswitches change parameters through the message thread, so the host records them.
+- **State** also holds the fixed preset-key registrations and the MIDI-learn map.
+- **Latency:** the amp's oversampling filters delay the output 3 samples at 2× and 4 at 4× (0 at 1×). The plugin
+  reports this to the host and updates it when Amp OS changes.
+- **Rotor speed** from the mod wheel (Half Moon / Momentary), the Speed CC, the sustain pedal (when enabled), or the
+  Speed switch; Variable mode sweeps it from the mod wheel, expression or Speed CC.
 - **Programs**: the factory presets appear in the host's program list as `Category - Name`.
 - **State**: the project saves every parameter plus the selected preset.
 
@@ -61,8 +88,10 @@ There is no voice allocation: the cost is the 91 wheels plus one dot product per
   never stored, drawbars are written as whole steps. `PresetManager::migrate()` brings older versions up to date:
   ```json
   { "format": "The Ham Preset", "version": 1, "name": "My Organ", "category": "User",
-    "params": { "upB1": 8, "upB2": 8, "upB3": 8, "percOn": 1, "clickUp": 0.6 } }
+    "params": { "upB1": 8, "upB2": 8, "upB3": 8, "percOn": 1, "clickUp": 0.6 },
+    "registrations": { "upper": ["00 5320 000", "00 4432 000", "..."], "lower": ["..."] } }
   ```
+  `registrations` = the fixed preset keys C♯–A per manual; missing (or unreadable) entries get the factory chart.
 
 ## Tests
 
@@ -70,8 +99,10 @@ There is no voice allocation: the cost is the 91 wheels plus one dot product per
 |---|---|
 | `TheHamTests.exe` | parameter table, factory presets (ranges, 5 categories, templates resolved, drawbars whole steps), preset file round trip, partial / old / garbage files, the organ checks below, every preset renders (not silent, no clipping, silent after release), loudness of every preset within ±1 dB of −18 dB |
 | `TheHamTests.exe --organ` | 35 organ checks: all 91 wheel frequencies against the gear formula and published values; A = 440.000 Hz; measured pitch for 8', folded 16', 50 Hz mains, A = 450 and transpose; every key × footage on both manuals against Electric Druid's foldback table; wheels 1–12 pedal-only; taper range; **phase continuity** (a re-pressed key and staggered chord presses are bit-identical to fresh presses once the contacts settle); key click (100% vs 0%, contact spread and bounce, key-up click); drawbar law (8 → 5 = −9 dB, 1 = −21 dB, 0 = silent); preset keys; channel and split routing; note-off after a transpose change; motor (pitch dive, Run can't start it, Start in 1 s, Motor Off CC); chromatic and white-key glissandos; CC maps |
+| `TheHamTests.exe --voice` | 26 voice checks: percussion decay (−30 dB at half of Fast and Slow), pitch (Second / Third), single trigger, set B only, 1' cancel, Normal −4.36 dB on the drawbars, Soft −6 dB; scanner off steady, depth V1 < V2 < V3 (±13.7 / ±27.4 / ±41.1 cents), rate 6.87 Hz, C3 = (V3 + dry) / 2 exactly, per-manual switches; expression quieter, darker, bass cut less than mids; leakage partner −30 dB (+ voicing), the floor; Age harmonics and level spread; pedal and lower sustain times; manual bass; editable preset-key registrations; keyswitch and learn rules |
+| `TheHamTests.exe --cabinet` | 33 cabinet checks: rotors start at speed; Slow→Fast within 2% after exactly Accel (1.001 s / 4.000 s), Fast→Slow after Brake (1.501 / 5.000 s), horn leads, drum lags; steady speeds; 3-speed Stop and brake to 90.0°; 2-speed Stop = Slow; overrides, Drum Off, Stationary, directions; half moon, momentary, sustain, Speed CC, 3-speed CC, Variable; Doppler (±41 cents Fast, ±5 Slow), AM (10.6 dB Fast, 0.01 dB stationary), stereo (horn L/R correlation 0.39), mono / Width 0 / Bypass identical channels; no click on Slow↔Fast; mono compatibility of 4 cabinets × 5 layouts (worst band −6.2 dB); amp aliasing at C6 (1× −53, 2× −77, 4× −78 dB) and measured vs reported latency; overdrive, wah, tape echo, spring reverb; organ models |
 | `TheHamTests.exe --host-check "<path>\The Ham.vst3"` | loads the built VST3 like a DAW: scans as an instrument, all parameters named, notes + a drawbar CC make sound while parameters are automated, state restores exactly, programs switch |
-| `TheHamTests.exe --bench` | all 61 + 61 + 25 keys held with every drawbar out: 2.5% of one core; one key: 1.3% |
+| `TheHamTests.exe --bench` | all 61 + 61 + 25 keys held, every drawbar out, percussion, scanner on both manuals, leakage and Age 100%, Fast rotors, 4× amp, dual horns, 3 mics + room, overdrive + wah + echo + reverb: 4.6% of one core; one key: 3.2% |
 | `TheHamTests.exe --loudness` | loudness of every factory preset (JSON) |
 | `TheHamTests.exe --render "<Category/Name>" out.wav [demo\|chord\|gliss\|click]` | offline render of a preset |
 | `TheHamTests.exe --render-all <folder>` | every preset, demo phrase |
@@ -89,9 +120,16 @@ Source/
   dsp/Common.h               RNG, safety clipper, drawbar law
   dsp/Tonewheels.h           gear train, wheel frequencies, voicing
   dsp/Wiring.h               key -> wheel charts (foldback, taper), pedal composites, preset-key registrations
+  dsp/Scanner.h              scanner vibrato / chorus (all-pass line, rotor), biquads
+  dsp/Preamp.h               preamp / expression (three-band)
+  dsp/Oversampler.h          IIR half-bands (HIIR design), ADAA shaper, the oversampled amp
+  dsp/Rotary.h               the rotary cabinet: crossover, rotor delay lines, pickups (Doppler, AM, filters, reflections)
+  dsp/Cabinets.h             cabinet models (voicing + parameter defaults)
+  dsp/Outboard.h             overdrive, wah, tape echo
+  dsp/SpringReverb.h         spring reverb
   EngineParamsFromValues.h   parameter values -> engine snapshot (plugin + tests)
   MidiRouting.h              MIDI message -> engine (plugin + parity tool)
-  CcMap.h                    drawbar CC maps for hardware controllers
+  CcMap.h                    drawbar CC maps, preset-key keyswitches, learnable CCs
   PresetManager.*            factory templates, user folder, .hampreset read/write/migrate
   PluginProcessor.*          APVTS, MIDI, CC maps -> parameters, UI key FIFO, programs, state
   PluginEditor.*             WebView2 host + JS <-> C++ bridge
@@ -103,7 +141,7 @@ ui/                          HTML/CSS/SVG/JS UI, embedded in the binary
   js/engine-juce.js          the bridge
   js/app.js                  UI wiring
 presets/factory_presets.json
-tests/                       PresetTests.cpp, OrganTests.cpp, EngineTools.cpp, HostCheck.cpp, TestRender.h,
+tests/                       PresetTests.cpp, OrganTests.cpp, VoiceTests.cpp, CabinetTests.cpp, EngineTools.cpp, HostCheck.cpp, TestRender.h,
                              check-params.ps1, level-match.ps1
 ```
 
@@ -112,11 +150,13 @@ tests/                       PresetTests.cpp, OrganTests.cpp, EngineTools.cpp, H
 | UI → host | host → UI (30 Hz, only changes) |
 |---|---|
 | `uiReady`, `setParam {id,value}`, `gesture {id,begin}` | `params {id:value,…}` |
-| `noteOn {manual,key,vel}`, `noteOff {manual,key}`, `panic` | `notes {on:[[manual,key],…],off:[…]}` |
+| `noteOn {manual,key,vel}`, `noteOff {manual,key}`, `panic`, `expression {value}` | `notes {on:[[manual,key],…],off:[…]}` |
+| `setRegistration {manual,key,bars}`, `midiLearn {id}`, `midiForget {id}`, `learnCancel` | `registrations {upper[9],lower[9]}`, `learn {armed,map{id:cc}}` |
+| `cabinetModel {model}` (sets the model and loads its defaults) | `rotor {hornAngle,drumAngle,hornHz,drumHz}` (turns, Hz; every tick while it changes) |
 | `loadPreset {id}`, `savePreset {name,overwrite}`, `deletePreset {id}`, `loadPresetFile`, `openPresetFolder`, `paramMenu {id,x,y}` | `presetList {presets,folder}`, `preset {id,name,category}`, `saveResult {ok,exists,name,error}`, `message {text}` |
-| | `stats {peak,sustain,modWheel,expression,motor}`, `config {…}` |
+| | `stats {peak,sustain,modWheel,expression,motor,perc,speed}`, `config {…}` |
 
-`rotor {hornAngle,drumAngle,hornHz,drumHz}` arrives with the cabinet (phases 3–4).
+The cabinet drawing (phase 4) animates from the `rotor` events.
 
 ## Troubleshooting
 
