@@ -14,37 +14,37 @@
   },
   "categories": [
     { "name": "Jazz", "presets": [
-      { "name": "Trio Classic", "base": "organ", "params": { "ampLevel": -1.6,
+      { "name": "Trio Classic", "base": "organ", "params": { "ampLevel": -1.5,
         "upB1": 8, "upB2": 8, "upB3": 8, "upB4": 0, "upB5": 0, "upB6": 0, "upB7": 0, "upB8": 0, "upB9": 0,
         "percOn": 1, "percVol": 0, "percDecay": 0, "percHarm": 1 } },
-      { "name": "Ballad Smoke", "base": "organ", "params": { "ampLevel": -2.3,
+      { "name": "Ballad Smoke", "base": "organ", "params": { "ampLevel": -2.2,
         "upB1": 8, "upB2": 3, "upB3": 8, "upB4": 0, "upB5": 0, "upB6": 0, "upB7": 0, "upB8": 0, "upB9": 0 } }
     ] },
     { "name": "Gospel", "presets": [
       { "name": "Full Organ", "base": "organ", "params": { "ampLevel": -3.5,
         "upB1": 8, "upB2": 8, "upB3": 8, "upB4": 8, "upB5": 8, "upB6": 8, "upB7": 8, "upB8": 8, "upB9": 8,
         "speed": 2 } },
-      { "name": "Hymn Swell", "base": "tone", "params": { "ampLevel": -1.1,
+      { "name": "Hymn Swell", "base": "tone", "params": { "ampLevel": -1.4,
         "upB1": 0, "upB2": 0, "upB3": 6, "upB4": 8, "upB5": 7, "upB6": 6, "upB7": 4, "upB8": 0, "upB9": 0 } }
     ] },
     { "name": "Rock", "presets": [
       { "name": "Overdrive Stack", "base": "organ", "params": { "ampLevel": -3.3,
         "upB1": 8, "upB2": 8, "upB3": 8, "upB4": 8, "upB5": 8, "upB6": 8, "upB7": 8, "upB8": 8, "upB9": 8,
         "drive": 0.8, "speed": 2 } },
-      { "name": "Rock Pad", "base": "organ", "params": { "ampLevel": -1.3,
+      { "name": "Rock Pad", "base": "organ", "params": { "ampLevel": -1.1,
         "upB1": 0, "upB2": 0, "upB3": 8, "upB4": 8, "upB5": 8, "upB6": 8, "upB7": 0, "upB8": 0, "upB9": 0 } }
     ] },
     { "name": "Blues & Soul", "presets": [
       { "name": "Memphis Soul", "base": "organ", "params": { "ampLevel": -3.4,
         "upB1": 8, "upB2": 8, "upB3": 8, "upB4": 0, "upB5": 0, "upB6": 0, "upB7": 0, "upB8": 0, "upB9": 0 } },
-      { "name": "Motown Pad", "base": "organ", "params": { "ampLevel": -0.7,
+      { "name": "Motown Pad", "base": "organ", "params": { "ampLevel": -0.6,
         "upB1": 0, "upB2": 0, "upB3": 8, "upB4": 8, "upB5": 0, "upB6": 8, "upB7": 0, "upB8": 0, "upB9": 0 } }
     ] },
     { "name": "Ballad, Classic & Theatre", "presets": [
-      { "name": "Flute 8'", "base": "tone", "params": { "ampLevel": -3.4,
+      { "name": "Flute 8'", "base": "tone", "params": { "ampLevel": -3.7,
         "upB1": 0, "upB2": 0, "upB3": 8, "upB4": 0, "upB5": 0, "upB6": 0, "upB7": 0, "upB8": 0, "upB9": 0,
         "vibMode": 0 } },
-      { "name": "Bach Plenum", "base": "tone", "params": { "ampLevel": -7.3,
+      { "name": "Bach Plenum", "base": "tone", "params": { "ampLevel": -8,
         "upB1": 8, "upB2": 8, "upB3": 8, "upB4": 8, "upB5": 8, "upB6": 8, "upB7": 8, "upB8": 8, "upB9": 8,
         "vibUpper": 0, "vibLower": 0 } }
     ] }

@@ -12,8 +12,11 @@
 //                narrow, mid-heavy, watery.
 //  Tone Cabinet  stationary (PR-40-style): fixed speakers, built-in spring reverb.
 //
-//  The voicing numbers (radii, AM depths, filter corners, box resonance, amp) are
-//  The Ham's estimates: no measured data for these cabinets was found. The speed
+//  Each model has a speaker / cabinet voicing after the amp (band + colour peak), so the
+//  models differ on any chord, not only through the rotors; the tests require every pair
+//  to differ by >= 3 dB in some band. The voicing numbers (radii, AM depths, filter
+//  corners, box resonance, amp) are The Ham's estimates: no measured data for these
+//  cabinets was found. The speed
 //  defaults of Rotor 22 are the brief's (horn 0.8 / 6.7 Hz, 1 s up / 1.5 s down;
 //  drum 0.7 / 5.8 Hz, 4 s / 5 s).
 // ============================================================================
@@ -39,6 +42,10 @@ struct CabinetModel
     double reverbMix;                                   // built-in spring reverb
     bool stationary;                                    // fixed speakers, no rotors
     double outGain;
+    // speaker + cabinet voicing, after the amp: the band the speakers cover (4th-order high-
+    // and low-pass) and the cabinet's colour (one peak). This is what makes the models sound
+    // different on any chord, not only through the rotors.
+    double spkHpHz, spkLpHz, midHz, midDb, midQ;
 };
 
 inline const CabinetModel& cabinetModel (int i)
@@ -46,20 +53,24 @@ inline const CabinetModel& cabinetModel (int i)
     static const CabinetModel models[4] {
         // Rotor 22
         { 0, 0.8, 6.7, 1.0, 1.5,   0.7, 5.8, 4.0, 5.0,   0, 800.0, 0, 1,
-          0.15, 0.10,  0.55, 0.45,  12000.0, 3000.0, 2500.0, 900.0,  120.0, 3.0, 1.2,  1.4,
-          6.0, 0.20, 40.0, 7000.0,  0.0, false, 0.80 },
+          0.15, 0.10,  0.55, 0.45,  12000.0, 3000.0, 2500.0, 900.0,  100.0, 4.0, 0.9,  1.4,
+          6.0, 0.20, 40.0, 7000.0,  0.0, false, 0.80,
+          35.0, 9000.0, 2500.0, 1.0, 1.0 },          // big closed box: full deep bass, warm, smooth
         // Rotor 45
         { 0, 0.85, 6.8, 0.9, 1.4,  0.75, 6.0, 3.5, 4.5,  0, 800.0, 0, 1,
-          0.15, 0.10,  0.55, 0.45,  11000.0, 2800.0, 2500.0, 900.0,  180.0, 5.0, 1.5,  0.9,
-          10.0, 0.25, 70.0, 6500.0, 0.0, false, 0.80 },
+          0.15, 0.10,  0.60, 0.50,  9000.0, 2500.0, 2200.0, 800.0,  200.0, 6.0, 1.4,  0.6,
+          15.0, 0.25, 70.0, 6000.0, 0.0, false, 0.80,
+          130.0, 5500.0, 1200.0, 8.0, 1.0 },          // smaller box: lean bottom, midrange punch, earlier breakup
         // Single Rotor
         { 2, 0.9, 6.0, 1.2, 2.0,   0.9, 6.0, 1.2, 2.0,   2, 800.0, 0, 2,
-          0.15, 0.10,  0.40, 0.60,  6000.0, 2000.0, 5000.0, 1500.0,  300.0, 4.0, 1.0,  0.7,
-          8.0, 0.30, 120.0, 5000.0, 0.0, false, 0.90 },
+          0.15, 0.10,  0.40, 0.75,  6000.0, 2000.0, 4500.0, 1200.0,  300.0, 4.0, 1.0,  0.7,
+          10.0, 0.30, 120.0, 5000.0, 0.0, false, 0.90,
+          180.0, 4000.0, 900.0, 8.0, 0.9 },          // one 10" behind foam: narrow, mid-heavy, throbbing
         // Tone Cabinet
         { 3, 0.8, 6.7, 1.0, 1.5,   0.7, 5.8, 4.0, 5.0,   0, 800.0, 0, 2,
           0.15, 0.10,  0.0, 0.0,    12000.0, 12000.0, 4000.0, 4000.0,  100.0, 2.0, 1.0,  2.5,
-          3.0, 0.10, 40.0, 9000.0,  0.25, true, 0.80 },
+          3.0, 0.10, 40.0, 9000.0,  0.30, true, 0.80,
+          45.0, 13000.0, 3500.0, 4.0, 0.7 },         // fixed full-range speakers: flat, open
     };
     return models[i < 0 ? 0 : (i > 3 ? 3 : i)];
 }

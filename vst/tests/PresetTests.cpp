@@ -15,9 +15,11 @@ int runRenderAll (const juce::File&);
 int runLoudness();
 int runBench();
 int runHostCheck (const juce::String& path);
+int runHostCab (const juce::String& path);
 int runOrganTests();
 int runVoiceTests();
 int runCabinetTests();
+int runCabCompare (const juce::File&);
 double presetLoudness (const PresetData&);
 
 static void testParamTable()
@@ -206,9 +208,11 @@ int main (int argc, char* argv[])
     if (cmd == "--loudness") return runLoudness();
     if (cmd == "--bench") return runBench();
     if (cmd == "--host-check" && argc >= 3) return runHostCheck (argv[2]);
+    if (cmd == "--host-cab" && argc >= 3) return runHostCab (argv[2]);
     if (cmd == "--organ") return runOrganTests() == 0 ? 0 : 1;
     if (cmd == "--voice") return runVoiceTests() == 0 ? 0 : 1;
     if (cmd == "--cabinet") return runCabinetTests() == 0 ? 0 : 1;
+    if (cmd == "--cab-compare") return runCabCompare (argc >= 3 ? juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]) : juce::File());
 
     PresetManager pm;
     testParamTable();

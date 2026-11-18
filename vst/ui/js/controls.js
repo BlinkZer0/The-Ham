@@ -175,3 +175,96 @@ class ModWheel {
     });
   }
 }
+
+// ---------------------------------------------------------------------------
+// Rocker: the organ's tablet switch, for a bool or a two-choice parameter. The tab
+// tilts (CSS 3D, animated) toward the selected half; click toggles, or click a half.
+// labels: [first, second] (bool: [off, on]); title: printed on the tab.
+class Rocker {
+  constructor(def, value, onChange, title, labels, tone) {
+    this.def = def;
+    this.onChange = onChange;
+    this.labels = labels || (def.type === 'bool' ? ['OFF', 'ON'] : def.choices);
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'rocker' + (tone ? ' ' + tone : '');
+    el.setAttribute('aria-label', def.name);
+    el.innerHTML = `<span class="rocker-tab"><span class="rk-top">${this.labels[1]}</span>`
+      + `<span class="rk-title">${title || def.name}</span><span class="rk-bot">${this.labels[0]}</span></span>`;
+    el.addEventListener('click', (e) => {
+      const r = el.getBoundingClientRect();
+      const half = e.clientY < r.top + r.height * 0.38 ? 1 : (e.clientY > r.bottom - r.height * 0.38 ? 0 : (this.value >= 0.5 ? 0 : 1));
+      if (half !== (this.value >= 0.5 ? 1 : 0)) this.onChange(half);
+    });
+    el.addEventListener('dblclick', (e) => e.preventDefault());
+    this.el = el;
+    this.setValue(value);
+  }
+  setValue(v) {
+    this.value = v;
+    const on = v >= 0.5;
+    this.el.classList.toggle('on', on);
+    this.el.setAttribute('aria-pressed', on);
+    this.el.title = `${this.def.name}: ${formatParam(this.def, v)}`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ExpressionPedal: a swell shoe seen from the side. Toe down = open (1). Drag up/down,
+// wheel, double-click = open. Follows the engine's value (CC11) with a short animation.
+class ExpressionPedal {
+  constructor(onChange, onGesture) {
+    this.onChange = onChange;
+    this.onGesture = onGesture || null;
+    this.value = 1;
+    this.drag = null;
+    const el = document.createElement('div');
+    el.className = 'expr-pedal';
+    el.innerHTML = `
+      <svg viewBox="0 0 70 54" tabindex="0" role="slider" aria-label="Expression pedal" aria-valuemin="0" aria-valuemax="127">
+        <rect class="ep-base" x="4" y="42" width="62" height="8" rx="3"/>
+        <rect class="ep-hinge" x="8" y="34" width="8" height="10" rx="2"/>
+        <g class="ep-shoe"><rect class="ep-plate" x="8" y="28" width="58" height="9" rx="3"/>
+          <line class="ep-tread" x1="22" x2="62" y1="31" y2="31"/><line class="ep-tread" x1="22" x2="62" y1="34" y2="34"/></g>
+      </svg>
+      <span class="ctl-label">EXPR</span><span class="wheel-value">127</span>`;
+    this.el = el;
+    this.svg = el.querySelector('svg');
+    this.shoe = el.querySelector('.ep-shoe');
+    this.readout = el.querySelector('.wheel-value');
+    this.bind();
+    this.render();
+  }
+  set(v, notify) {
+    v = clamp(v, 0, 1);
+    if (v === this.value) return;
+    this.value = v;
+    this.render();
+    if (notify) this.onChange(v);
+  }
+  setValue(v) { if (!this.drag) this.set(v, false); }
+  render() {
+    // closed: toe up (-17 deg); open: toe down (+4 deg), hinged at the heel
+    this.shoe.style.transform = `rotate(${(-17 + 21 * this.value).toFixed(1)}deg)`;
+    this.readout.textContent = Math.round(this.value * 127);
+    this.svg.setAttribute('aria-valuenow', String(Math.round(this.value * 127)));
+  }
+  bind() {
+    const svg = this.svg;
+    svg.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      svg.setPointerCapture(e.pointerId);
+      this.drag = { y: e.clientY, v: this.value };
+      if (this.onGesture) this.onGesture(true);
+    });
+    svg.addEventListener('pointermove', (e) => {
+      if (!this.drag) return;
+      this.set(this.drag.v + (e.clientY - this.drag.y) * 0.01, true);   // push the toe down = open
+    });
+    const end = () => { if (!this.drag) return; this.drag = null; if (this.onGesture) this.onGesture(false); };
+    svg.addEventListener('pointerup', end);
+    svg.addEventListener('pointercancel', end);
+    svg.addEventListener('dblclick', () => this.set(1, true));
+    svg.addEventListener('wheel', (e) => { e.preventDefault(); this.set(this.value + (e.deltaY > 0 ? 1 : -1) * (e.shiftKey ? 1 / 127 : 8 / 127), true); }, { passive: false });
+  }
+}

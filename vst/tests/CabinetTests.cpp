@@ -423,6 +423,69 @@ void testOrganModels()
     KCHECK (same && rms (t, sec (0.45), sec (0.6)) > 1e-4 && rms (u, sec (0.45), sec (0.6)) < 1e-6,
             "C-3 sounds exactly like the B-3; the A-100's built-in reverb leaves a tail");
 }
+
+// ---- the cabinets sound different -------------------------------------------------------------
+// The same chord through each cabinet (with the defaults the UI loads when it is picked): level in
+// four bands (< 150 Hz, 150-600 Hz, 600 Hz-2.5 kHz, > 2.5 kHz), the overall level removed.
+Values cabinetPicked (int m)
+{
+    auto v = cabValues();
+    const auto& M = cabinetModel (m);
+    v[cabModel] = (float) m; v[rotorConfig] = (float) M.rotorConfig; v[drumBaffle] = (float) M.drumBaffle;
+    v[micLayout] = (float) M.micLayout; v[xover] = (float) M.xover;
+    v[hornSlow] = (float) M.hornSlow; v[hornFast] = (float) M.hornFast; v[drumSlow] = (float) M.drumSlow; v[drumFast] = (float) M.drumFast;
+    return v;
+}
+
+std::array<double, 4> bandProfile (const Audio& a, int from)
+{
+    const double edges[5] { 20, 150, 600, 2500, 16000 };
+    std::array<double, 4> e {};
+    double total = 0;
+    for (int b = 0; b < 4; ++b)
+    {
+        Biquad h1, h2, l1, l2;
+        h1.setHighpass (edges[b], 0.5412, kSr); h2.setHighpass (edges[b], 1.3066, kSr);
+        l1.setLowpass (edges[b + 1], 0.5412, kSr); l2.setLowpass (edges[b + 1], 1.3066, kSr);
+        double acc = 0;
+        for (int i = 0; i < a.size(); ++i)
+        {
+            const double y = l2.process (l1.process (h2.process (h1.process (0.5 * (a.L[(size_t) i] + a.R[(size_t) i])))));
+            if (i >= from) acc += y * y;
+        }
+        e[(size_t) b] = acc; total += acc;
+    }
+    for (auto& x : e) x = 10.0 * std::log10 (std::max (x, 1e-30) / total);
+    return e;
+}
+
+Audio cabinetChord (int m)
+{
+    auto v = cabinetPicked (m);
+    setBars (v, 0, 1, "888888888");   // all nine bars: energy up to 4-5 kHz, so the speakers' voicing shows
+    setBars (v, 1, 1, "008080800");
+    v[pd16] = 5; v[pd8] = 3;
+    return render (v, { key (0.02, 24), key (0.02, 28), key (0.02, 31), key (0.02, 36), key (0.02, 12, 1), key (0.02, 16, 1), key (0.02, 0, 2) }, 1.6);
+}
+
+void testCabinetsDiffer()
+{
+    std::array<std::array<double, 4>, 4> prof {};
+    for (int m = 0; m < 4; ++m) prof[(size_t) m] = bandProfile (cabinetChord (m), sec (0.4));
+    double closest = 1e9;
+    int ca = 0, cb = 0;
+    for (int a = 0; a < 4; ++a)
+        for (int b = a + 1; b < 4; ++b)
+        {
+            double most = 0;
+            for (int k = 0; k < 4; ++k) most = std::max (most, std::abs (prof[(size_t) a][(size_t) k] - prof[(size_t) b][(size_t) k]));
+            if (most < closest) { closest = most; ca = a; cb = b; }
+        }
+    for (int m = 0; m < 4; ++m)
+        std::printf ("     cabinet %d bands (dB of total): low %.1f, low-mid %.1f, mid %.1f, high %.1f\n", m,
+                     prof[(size_t) m][0], prof[(size_t) m][1], prof[(size_t) m][2], prof[(size_t) m][3]);
+    KCHECK (closest >= 3.0, "the four cabinets sound different: the closest pair (%d, %d) still differs by %.1f dB in some band", ca, cb, closest);
+}
 } // namespace
 
 int runCabinetTests()
@@ -436,5 +499,57 @@ int runCabinetTests()
     testAmp();
     testOutboardAndReverb();
     testOrganModels();
+    testCabinetsDiffer();
     return fails;
+}
+
+// --cab-compare: the same chord through each cabinet (with the defaults the UI loads), measured.
+int runCabCompare (const juce::File& folder)
+{
+    if (folder != juce::File())   // write the same full-organ chord through each cabinet, Slow then Fast
+    {
+        folder.createDirectory();
+        const char* names[] { "rotor22", "rotor45", "single-rotor", "tone-cabinet" };
+        for (int m = 0; m < 4; ++m)
+        {
+            auto v = cabinetPicked (m);
+            setBars (v, 0, 1, "888888888"); setBars (v, 1, 1, "008080800"); v[pd16] = 5; v[pd8] = 3;
+            const auto a = render (v, { key (0.05, 24), key (0.05, 28), key (0.05, 31), key (0.05, 36), key (0.05, 12, 1), key (0.05, 16, 1), key (0.05, 0, 2),
+                                        { sec (5.5), Event::KeyOff, 24, 0, 0 }, { sec (5.5), Event::KeyOff, 28, 0, 0 }, { sec (5.5), Event::KeyOff, 31, 0, 0 },
+                                        { sec (5.5), Event::KeyOff, 36, 0, 0 }, { sec (5.5), Event::KeyOff, 12, 0, 1 }, { sec (5.5), Event::KeyOff, 16, 0, 1 },
+                                        { sec (5.5), Event::KeyOff, 0, 0, 2 } }, 7.0,
+                                  [] (int start, EngineParams& p) { p.speed = start >= sec (2.5) ? 2 : 1; });
+            const auto f = folder.getChildFile (juce::String (names[m]) + ".wav");
+            writeWav (f, a);
+            std::printf ("%s\n", f.getFullPathName().toRawUTF8());
+        }
+    }
+    Audio out[4];
+    for (int m = 0; m < 4; ++m)
+    {
+        auto v = cabValues();
+        setBars (v, 0, 1, "888000000");
+        const auto& M = cabinetModel (m);
+        v[cabModel] = (float) m; v[rotorConfig] = (float) M.rotorConfig; v[drumBaffle] = (float) M.drumBaffle;
+        v[micLayout] = (float) M.micLayout; v[xover] = (float) M.xover;
+        v[hornSlow] = (float) M.hornSlow; v[hornFast] = (float) M.hornFast; v[drumSlow] = (float) M.drumSlow; v[drumFast] = (float) M.drumFast;
+        out[m] = render (v, { key (0.02, 12), key (0.02, 24), key (0.02, 28), key (0.02, 31) }, 2.0);
+        std::printf ("cabinet %d: rms %.1f dB, centroid %.0f Hz, L/R corr ", m, db (rms (out[m], sec (0.5), sec (2.0))),
+                     spectralCentroid (out[m], sec (0.8), 9600));
+        double num = 0, dl = 0, dr = 0;
+        for (int i = sec (0.5); i < sec (2.0); ++i) { num += out[m].L[(size_t) i] * out[m].R[(size_t) i]; dl += out[m].L[(size_t) i] * out[m].L[(size_t) i]; dr += out[m].R[(size_t) i] * out[m].R[(size_t) i]; }
+        std::printf ("%.2f\n", num / std::sqrt (dl * dr));
+    }
+    for (int a = 0; a < 4; ++a)
+        for (int b = a + 1; b < 4; ++b)
+        {
+            double diff = 0, ref = 0;
+            for (int i = sec (0.5); i < sec (2.0); ++i)
+            {
+                const double d = out[a].L[(size_t) i] - out[b].L[(size_t) i];
+                diff += d * d; ref += out[a].L[(size_t) i] * out[a].L[(size_t) i];
+            }
+            std::printf ("cabinet %d vs %d: difference %.1f dB below the signal\n", a, b, -db (std::sqrt (diff / ref)));
+        }
+    return 0;
 }

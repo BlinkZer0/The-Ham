@@ -185,8 +185,8 @@ body:not(.web) .web-only { display: none; }
 .row { display: grid; gap: 12px; }
 .voice-row-1 { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); }
 .voice-row-2 { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
-.cab-row-1 { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.4fr); }
-.cab-row-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr); }
+.cab-row-1 { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.2fr); }
+.cab-row-2 { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr) minmax(0, 0.9fr); }
 .play-row-1 { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 1fr); }
 .play-row-2 { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
 .fx-row-1 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr); }
@@ -369,3 +369,106 @@ body.learning .knob, body.learning .drawbar { position: relative; }
 .speed-lamp.on { color: var(--accent); }
 .speed-lamp.on .led { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow), 0 0 2px var(--accent); }
 .rpm { margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: 0; color: var(--text); }
+
+/* ------------------------------------------------------- cabinet drawing --- */
+.cab-layout { display: grid; grid-template-columns: 262px minmax(0, 1fr); gap: 12px; }
+.cab-controls { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.cab-view { background: radial-gradient(260px 300px at 50% 40%, #2a1a12, #110a07); border: 1px solid var(--panel-edge); border-radius: 10px; padding: 6px; display: flex; }
+.cab-svg { width: 100%; height: auto; display: block; }
+.cab-layer { opacity: 0; transition: opacity 350ms ease; }
+.cab-layer.active { opacity: 1; }
+.cab-body { fill: url(#cabWood); stroke: #1b0e07; stroke-width: 2; }
+.cab-louvre { stroke: #1a0d06; stroke-width: 2.5; stroke-linecap: round; }
+.cab-win { fill: url(#cabInside); stroke: #120905; stroke-width: 1.5; transition: fill 300ms; }
+.cab-win.open { fill: url(#cabOpen); }
+.cab-amp-box { fill: #2a2420; stroke: #0e0a08; }
+.cab-tube { fill: var(--accent); filter: drop-shadow(0 0 3px var(--accent-glow)); opacity: 0.6; }
+.horn-body { fill: url(#hornMetal); stroke: #4d4a44; stroke-width: 0.8; }
+.horn-body.dummy { fill: #4a4540; stroke: #2a2724; }
+.horn-mouth { fill: #0a0706; stroke: #d8d2c6; stroke-width: 1.2; }
+.horn-mouth.dummy { stroke: #5a5550; fill: #2a2622; }
+.horn-ghost { fill: #e8e2d6; stroke: none; pointer-events: none; }
+.horn-hub { fill: #8f8a80; stroke: #3a3632; }
+.horn-driver { fill: #2b2724; stroke: #11100e; }
+.drum-face { fill: url(#drumFace); stroke: #120a06; }
+.drum-face.foam { fill: url(#foamDots); }
+.drum-face.open-baffle { opacity: 0.75; }
+.drum-slat { stroke: #2a1a10; stroke-width: 2.2; }
+.drum-scoop { fill: #050302; }
+.drum-rim { fill: #3d2a1d; stroke: #120a06; }
+.tone-grille { fill: #2b201a; stroke: #120a06; }
+.tone-cone { fill: #1a1310; stroke: #8a7a68; stroke-width: 1.5; }
+.tone-dust { fill: #3a2c22; }
+.tone-tank { fill: #3a3430; stroke: #120a06; }
+.tone-spring { fill: none; stroke: #b8b0a2; stroke-width: 1; }
+.mic-stand { stroke: #8a8378; stroke-width: 1.5; }
+.mic-head { fill: #c9c2b4; stroke: #3a3632; }
+.mic.far .mic-head { fill: #9a9388; }
+.mic-label { fill: var(--accent); font: 700 8px var(--sans); text-anchor: middle; }
+.cab-label { fill: var(--muted); font: 700 9px var(--sans); letter-spacing: 0.18em; text-anchor: middle; }
+
+/* -------------------------------------------------------------- rockers --- */
+.rocker-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.rocker { background: none; border: none; padding: 0; cursor: pointer; perspective: 90px; }
+.rocker-tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between; width: 58px; height: 54px;
+  border-radius: 5px; padding: 4px 3px; transform-origin: 50% 50%; transform: rotateX(-14deg);
+  transition: transform 140ms ease, background 140ms, box-shadow 140ms;
+  background: linear-gradient(180deg, #e9e0c8 0%, #f6efdc 45%, #cbbf9f 100%);
+  box-shadow: 0 3px 0 #6a5f4a, 0 4px 6px rgba(0, 0, 0, 0.6);
+  color: #3b2d22;
+}
+.rocker.on .rocker-tab {
+  transform: rotateX(14deg);
+  background: linear-gradient(180deg, #cbbf9f 0%, #f6efdc 55%, #e9e0c8 100%);
+  box-shadow: 0 -1px 0 #6a5f4a, 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.rocker.dark .rocker-tab { background: linear-gradient(180deg, #2c2420, #4a3c33 45%, #1c1612); color: #e8dcc2; box-shadow: 0 3px 0 #0c0806, 0 4px 6px rgba(0, 0, 0, 0.6); }
+.rocker.dark.on .rocker-tab { background: linear-gradient(180deg, #1c1612, #4a3c33 55%, #2c2420); box-shadow: 0 -1px 0 #0c0806, 0 1px 3px rgba(0, 0, 0, 0.6); }
+.rk-title { font: 800 8.5px var(--sans); letter-spacing: 0.1em; }
+.rk-top, .rk-bot { font: 700 7px var(--sans); letter-spacing: 0.08em; opacity: 0.45; }
+.rocker.on .rk-top, .rocker:not(.on) .rk-bot { opacity: 1; color: #8a3a12; }
+.rocker.dark.on .rk-top, .rocker.dark:not(.on) .rk-bot { color: var(--accent); }
+.rocker:focus-visible .rocker-tab { outline: 1px solid var(--accent); }
+
+/* ---------------------------------------------------- expression pedal --- */
+.expr-pedal { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-top: 6px; }
+.expr-pedal svg { width: 64px; height: 50px; cursor: ns-resize; touch-action: none; outline: none; }
+.ep-base { fill: #1f1511; stroke: #3a2519; }
+.ep-hinge { fill: #6b6258; }
+.ep-shoe { transform-origin: 12px 33px; transition: transform 90ms linear; }
+.ep-plate { fill: url(#dbChrome); stroke: #3a3632; }
+.ep-tread { stroke: #4d4a44; stroke-width: 1; }
+
+/* -------------------------------------------------- header: history, A/B --- */
+.history { display: flex; gap: 4px; }
+.pd-btn.icon { padding: 4px 8px; font-size: 14px; letter-spacing: 0; }
+.pd-btn:disabled { opacity: 0.35; cursor: default; }
+.pd-btn.ab { padding: 6px 8px; }
+.pd-btn.ab.on { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-bg); }
+.pd-btn.ab-copy { padding: 6px 7px; font-size: 10px; }
+.pd-btn.small { padding: 3px 8px; font-size: 9.5px; }
+.db-tools { display: flex; align-items: center; gap: 6px; margin-bottom: -4px; }
+.console-badge { display: flex; align-items: center; gap: 5px; color: var(--cream-2); font: 800 10px var(--sans); letter-spacing: 0.12em; }
+.console-badge svg { width: 30px; height: 26px; fill: #5a3219; stroke: #a7663c; stroke-width: 0.8; }
+.console-badge svg .cb-hole { fill: #1a0d06; stroke: none; }
+/* C-3: the churchier case, a darker oak with an inset panel line */
+.synth.model-c3 {
+  background:
+    repeating-linear-gradient(92deg, var(--wood-grain) 0 1px, transparent 1px 7px),
+    radial-gradient(120% 60% at 50% -10%, rgba(255, 220, 170, 0.07), transparent 60%),
+    linear-gradient(180deg, #3b2414, #1f120a);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 220, 180, 0.12), inset 0 0 0 3px rgba(92, 27, 23, 0.35), inset 0 0 0 8px rgba(0, 0, 0, 0.18);
+}
+
+/* phase 4 layout fixes: keep the header on one line, let the cabinet drawing fill its panel */
+.topbar { flex-wrap: nowrap; gap: 12px; }
+.brand { flex: none; }
+.brand-text { white-space: nowrap; }
+.brand-mark { font-size: 18px; }
+.brand-sub { font-size: 8.5px; letter-spacing: 0.16em; }
+.console-badge { flex: none; white-space: nowrap; }
+.patch-display { min-width: 150px; }
+.top-controls { gap: 10px; flex: none; }
+.cab-view { display: block; }
+.cab-svg { width: 100%; height: 100%; }

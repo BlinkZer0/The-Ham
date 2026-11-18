@@ -101,12 +101,15 @@ There is no voice allocation: the cost is the 91 wheels plus one dot product per
 | `TheHamTests.exe --organ` | 35 organ checks: all 91 wheel frequencies against the gear formula and published values; A = 440.000 Hz; measured pitch for 8', folded 16', 50 Hz mains, A = 450 and transpose; every key × footage on both manuals against Electric Druid's foldback table; wheels 1–12 pedal-only; taper range; **phase continuity** (a re-pressed key and staggered chord presses are bit-identical to fresh presses once the contacts settle); key click (100% vs 0%, contact spread and bounce, key-up click); drawbar law (8 → 5 = −9 dB, 1 = −21 dB, 0 = silent); preset keys; channel and split routing; note-off after a transpose change; motor (pitch dive, Run can't start it, Start in 1 s, Motor Off CC); chromatic and white-key glissandos; CC maps |
 | `TheHamTests.exe --voice` | 26 voice checks: percussion decay (−30 dB at half of Fast and Slow), pitch (Second / Third), single trigger, set B only, 1' cancel, Normal −4.36 dB on the drawbars, Soft −6 dB; scanner off steady, depth V1 < V2 < V3 (±13.7 / ±27.4 / ±41.1 cents), rate 6.87 Hz, C3 = (V3 + dry) / 2 exactly, per-manual switches; expression quieter, darker, bass cut less than mids; leakage partner −30 dB (+ voicing), the floor; Age harmonics and level spread; pedal and lower sustain times; manual bass; editable preset-key registrations; keyswitch and learn rules |
 | `TheHamTests.exe --cabinet` | 33 cabinet checks: rotors start at speed; Slow→Fast within 2% after exactly Accel (1.001 s / 4.000 s), Fast→Slow after Brake (1.501 / 5.000 s), horn leads, drum lags; steady speeds; 3-speed Stop and brake to 90.0°; 2-speed Stop = Slow; overrides, Drum Off, Stationary, directions; half moon, momentary, sustain, Speed CC, 3-speed CC, Variable; Doppler (±41 cents Fast, ±5 Slow), AM (10.6 dB Fast, 0.01 dB stationary), stereo (horn L/R correlation 0.39), mono / Width 0 / Bypass identical channels; no click on Slow↔Fast; mono compatibility of 4 cabinets × 5 layouts (worst band −6.2 dB); amp aliasing at C6 (1× −53, 2× −77, 4× −78 dB) and measured vs reported latency; overdrive, wah, tape echo, spring reverb; organ models |
+| `TheHamTests.exe --cab-compare [folder]` | the same chord through each cabinet: level, centroid, L/R correlation, band profile; with a folder, writes it as WAVs (Slow, then Fast) to audition |
+| `TheHamTests.exe --host-cab "<path>\The Ham.vst3"` | the built plugin with its Cabinet parameter at each model: how different the output is |
 | `TheHamTests.exe --host-check "<path>\The Ham.vst3"` | loads the built VST3 like a DAW: scans as an instrument, all parameters named, notes + a drawbar CC make sound while parameters are automated, state restores exactly, programs switch |
 | `TheHamTests.exe --bench` | all 61 + 61 + 25 keys held, every drawbar out, percussion, scanner on both manuals, leakage and Age 100%, Fast rotors, 4× amp, dual horns, 3 mics + room, overdrive + wah + echo + reverb: 4.6% of one core; one key: 3.2% |
 | `TheHamTests.exe --loudness` | loudness of every factory preset (JSON) |
 | `TheHamTests.exe --render "<Category/Name>" out.wav [demo\|chord\|gliss\|click]` | offline render of a preset |
 | `TheHamTests.exe --render-all <folder>` | every preset, demo phrase |
 | `TheHamTests.exe --dump-params` | the C++ parameter table as JSON |
+| `powershell -File tests\run-ui-tests.ps1` | 25 UI checks in headless Edge (served, real time, mocked bridge): drawbars, registration strings, preset keys, keyboards, host params / notes, the registration editor, MIDI learn, expression pedal, rocker tabs, undo / redo, A/B, randomize, organ badge, cabinet picker; the cabinet drawing settles on reported angles, tracks a horn spinning at 6.7 Hz within 0.2° (97 frames in 1.5 s, 0.09 ms of script per frame), draws nothing when idle or off its page |
 | `powershell -File tests\check-params.ps1` | `params.js` matches `Params.h` exactly (order, IDs, ranges, defaults, units, choices) |
 | `powershell -File tests\level-match.ps1` | re-renders every preset and rewrites its `ampLevel` to the loudness target |
 
@@ -136,13 +139,14 @@ Source/
 ui/                          HTML/CSS/SVG/JS UI, embedded in the binary
   js/params.js               parameter definitions (UI side)
   js/drawbar.js              Drawbar and DrawbarSet (registration string)
+  js/cabinet.js              CabinetView: the animated cabinet cutaways, driven by `rotor` events
   js/piano.js                manuals, pedalboard, preset keys
-  js/knob.js, controls.js    knob, toggle, segmented, dropdown (shared with Brass Knuckles)
+  js/knob.js, controls.js    knob, toggle, segmented, dropdown (shared with Brass Knuckles); Rocker, ExpressionPedal
   js/engine-juce.js          the bridge
   js/app.js                  UI wiring
 presets/factory_presets.json
 tests/                       PresetTests.cpp, OrganTests.cpp, VoiceTests.cpp, CabinetTests.cpp, EngineTools.cpp, HostCheck.cpp, TestRender.h,
-                             check-params.ps1, level-match.ps1
+                             check-params.ps1, level-match.ps1, ui-tests.js, run-ui-tests.ps1
 ```
 
 ### Bridge events
@@ -156,7 +160,8 @@ tests/                       PresetTests.cpp, OrganTests.cpp, VoiceTests.cpp, Ca
 | `loadPreset {id}`, `savePreset {name,overwrite}`, `deletePreset {id}`, `loadPresetFile`, `openPresetFolder`, `paramMenu {id,x,y}` | `presetList {presets,folder}`, `preset {id,name,category}`, `saveResult {ok,exists,name,error}`, `message {text}` |
 | | `stats {peak,sustain,modWheel,expression,motor,perc,speed}`, `config {…}` |
 
-The cabinet drawing (phase 4) animates from the `rotor` events.
+The cabinet drawing animates from the `rotor` events: each frame draws the angle extrapolated from the latest report
+with its speed; a disagreeing report becomes an offset that fades out over ~80 ms.
 
 ## Troubleshooting
 

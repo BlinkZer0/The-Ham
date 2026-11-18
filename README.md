@@ -1,4 +1,4 @@
-# The Ham: v0.3 (phase 3 of 6)
+# The Ham: v0.4 (phase 4 of 6)
 
 The Ham is a tonewheel organ modeled on the B-3, to be played through rotary cabinets modeled on the 122 and its
 relatives. It is a model of the real instrument's architecture, not an oscillator-per-note synth: 91 tonewheels run all the
@@ -8,7 +8,7 @@ instrument in the family after [E-Piano](https://github.com/BlinkZer0/E-PianoVST
 
 | Build | Where | Status |
 |---|---|---|
-| **VST3 plugin** + Standalone | [`vst/`](vst/README.md) | phases 1–3: tonewheel generator, drawbars, key click, percussion, scanner vibrato/chorus, expression, leakage, Age, four rotary cabinets, tube amp, outboard pedals, spring reverb; all automated checks pass |
+| **VST3 plugin** + Standalone | [`vst/`](vst/README.md) | phases 1–4: tonewheel generator, drawbars, key click, percussion, scanner vibrato/chorus, expression, leakage, Age, four rotary cabinets, tube amp, outboard pedals, spring reverb, animated cabinet and the full UI; all automated checks pass |
 | **Web build** | `web/index.html` (also served at https://blinkzer0.github.io/The-Ham/) | phase 6 |
 
 The plan, the phases and the measured results are in [docs/PLAN.md](docs/PLAN.md). The house rules are in
@@ -83,8 +83,19 @@ built-in spring reverb).
 - **Outboard pedals** before the cabinet: overdrive, wah (playable from the expression pedal) and tape echo with wow
   and flutter. **Spring reverb** after it. **Bypass** gives the dry organ.
 
+### The UI
+- **An animated cutaway of the cabinet**, driven by the engine's real rotor angles and speeds: you can see the horn
+  reach Fast before the drum, and the drum keep turning after the horn has slowed. The horn blurs at speed. The drawing
+  follows the cabinet model (cross-fade), the rotors, dual horns, an open back and where the mics are. It stops
+  drawing when nothing moves or its page isn't shown.
+- **Rocker tabs** for percussion, vibrato and the motor; an **expression pedal** that follows CC11; drawbars that slide
+  to a new preset.
+- **Undo / redo** (Ctrl+Z / Ctrl+Y), **A/B compare**, and **random drawbars** by family (flute, diapason, reed,
+  string, jazz).
+- Five pages (DRAWBARS, VOICE, CABINET, PLAY · MIDI, FX) with LEDs that show which features are on.
+
 ### Organ models
-**B-3** (default), **C-3** (the same sound), **A-100** (the B-3 voice with its built-in reverb), **M-3** spinet
+**B-3** (default), **C-3** (the same sound in a churchier case: it changes only the look), **A-100** (the B-3 voice with its built-in reverb), **M-3** spinet
 (44-key manuals, no 16' on the lower manual, 13 pedals).
 
 ### Manuals and MIDI
@@ -98,7 +109,7 @@ built-in spring reverb).
   Learned CCs are saved with the project and stay when you change presets.
 
 ### Coming next
-The animated cabinet drawing and the remaining UI pages (phase 4). 50 presets (phase 5). The web build (phase 6). Their parameters
+The 50 presets (phase 5) and the web build (phase 6). 50 presets (phase 5). The web build (phase 6). Their parameters
 already exist and are saved with presets, so projects made now keep loading.
 
 ## Build and install

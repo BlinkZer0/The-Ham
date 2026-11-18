@@ -1,7 +1,77 @@
 # The Ham: build plan
 
-Status (2026-11-18): plan approved. **Phases 1–3 done** (tonewheel core, organ voice, rotary cabinets); waiting for
-hand-testing before phase 4.
+Status (2026-11-18): plan approved. **Phases 1–4 done** (tonewheel core, organ voice, rotary cabinets, animated UI);
+waiting for hand-testing before phase 5.
+
+Fix after phase 4 (hand-testing: "the cabs are not changing the sound"):
+- The plugin did switch cabinets (checked through the built VST3 with `--host-cab`), but the four models only differed
+  in a small box resonance, a little amp gain (which the amp's level matching then evened out) and slightly
+  different modulation. On an ordinary chord, mostly below the 800 Hz crossover, they sounded nearly the same.
+- Each model now has a **speaker and cabinet voicing** after the amp (`dsp/Cabinets.h`: 4th-order high-pass and
+  low-pass for the speakers' band, plus one colour peak): Rotor 22 35 Hz–9 kHz with a deep box at 100 Hz; Rotor 45
+  130 Hz–5.5 kHz, a +8 dB mid bump at 1.2 kHz, a boxier 200 Hz resonance, +15 dB amp gain (breaks up sooner); Single
+  Rotor 180 Hz–4 kHz, +8 dB at 900 Hz, deeper drum AM; Tone Cabinet 45 Hz–13 kHz, +4 dB presence at 3.5 kHz, reverb
+  0.30. These are still The Ham's estimates.
+- New check (`--cabinet`): the same full-registration chord through each cabinet (with its defaults loaded, as the UI
+  does), measured in four bands with the overall level removed. Every pair must differ by at least 3 dB in some band.
+  Measured: low band Rotor 22 −10.0, Rotor 45 −14.6, Single Rotor −22.8, Tone Cabinet −15.2 dB; high band −14.2,
+  −15.9, −21.7, −10.5 dB; the closest pair (22 vs 45) differs by 4.6 dB. Mono compatibility is unchanged (worst band
+  −6.2 dB). Presets level-matched again.
+- Tools: `--cab-compare [folder]` prints those measurements and writes the same chord through each cabinet (Slow, then
+  Fast) as WAVs; `--host-cab <vst3>` checks the Cabinet parameter through the built plugin.
+
+Phase 4 notes:
+- **Animated cabinet** (`ui/js/cabinet.js`, on the CABINET page): four cutaway drawings (Rotor 22 tall, Rotor 45
+  squatter, Single Rotor's foam drum alone, the Tone Cabinet's fixed speakers over a spring tank) that cross-fade over
+  350 ms when the model changes.
+  - The horn is drawn on an elliptical orbit (a front view of a vertical axis): its mouth faces you at angle 0, and
+    the dummy horn is darker unless Dual Active. The drum shows its slats and scoop opening sliding round.
+  - The drawing follows the layout options: Horn only / Drum only hide the other rotor, Stationary freezes them, an
+    open back shows a lighter interior, and the mic stands move with the layout, angle and distance (L/R, D for the
+    close drum mic, F/B for the room pair).
+  - At speed, three ghost copies trail the horn (motion blur); the amp's tubes glow brighter with Drive. The lit
+    Stop/Slow/Fast lamps and the horn/drum rpm readout come from phase 3.
+- **The drawing follows the engine, without lag.** Every frame draws the angle extrapolated from the latest `rotor`
+  report with its speed. When a new report disagrees, the difference becomes an offset that fades out over about
+  80 ms, so nothing jumps. A first version eased 35% toward the target each frame; at Fast (0.11 turn per frame) that
+  trailed by about 0.2 turn, which the UI test caught. **Measured** (headless Edge, served, real time): a horn spinning
+  at 6.7 Hz, reported every 33 ms, drawn within **0.2°** of its true angle; 97 frames in 1.5 s; **0.09 ms of script per
+  frame** (about 0.5% of one core at 60 fps; the browser's own drawing is not included in that number). It stops
+  completely when the rotors stand still and the drawing has caught up, when the window is hidden, and when the
+  CABINET page isn't shown (measured: 0 frames).
+- **Rocker tabs** (`Rocker` in controls.js): percussion On / Volume / Decay / Harmonic, Vibrato Swell / Great (upper /
+  lower), and the motor's Start / Run, as tablets that tilt (CSS 3D, 140 ms) toward the selected half. Click toggles,
+  or click a half.
+- **Expression pedal** (`ExpressionPedal`): a swell shoe seen from the side, toe down = open. It follows CC11 (from
+  `stats.expression`), can be dragged, scrolled and double-clicked (= open).
+- **Undo / redo** (header ↶ ↷, Ctrl+Z / Ctrl+Y or Ctrl+Shift+Z): snapshots of every preset parameter before each change
+  made in the UI. A drag, a wheel run or repeated clicks on one control within 0.8 s are one step, and a preset load
+  is one step. 100 steps. Host automation isn't recorded.
+- **A/B compare** (header A / B / A→B): two complete settings; switching stores the current one in its slot, and A→B
+  copies. Each switch is also an undo step.
+- **Randomize drawbars** (DRAWBARS page): FLUTE, DIAPASON, REED, STRING, JAZZ. A random registration inside the
+  family's [min, max] per footage (The Ham's rules, in app.js), on the active set of the chosen manual (set B when a
+  fixed preset key is down). The bars animate to it.
+- **Organ model in the UI:** a console badge next to the brand (B-3 on legs, C-3 with closed church-style sides, A-100
+  with its speaker panel, M-3 spinet). **C-3 changes only the look**: a darker oak case with an inset panel line. Its
+  sound is the B-3's, as tested in phase 3.
+- The UI tests are committed now instead of in phase 6: `tests/ui-tests.js` (a mocked JUCE bridge plus 25 checks) and
+  `tests/run-ui-tests.ps1`. The runner serves `vst/ui` over http and runs headless Edge in real time with background
+  throttling off. Headless pages count as hidden, so without those flags timers run once a second and
+  requestAnimationFrame doesn't run. Phase 6 extends the runner for the web build.
+- Layout: the header stays on one line (brand, badge, preset, history, A/B, indicators); the cabinet drawing takes a
+  262 px column on the CABINET page, and its viewBox margins are trimmed so it fills the column.
+
+What to listen for / look at in Minihost Modular (phase 4):
+- CABINET page: switch Slow ↔ Fast. The horn should visibly reach speed well before the drum, and on braking the drum
+  keeps turning after the horn has slowed. At Fast the horn blurs. The drawing should look smooth (60 fps) and match
+  what you hear.
+- Change the cabinet model (cross-fade), Rotors (Horn only / Drum only / Stationary), Horns (Dual Active), Back (Open),
+  Mics (the stands move), Drive (the tubes glow).
+- Rocker tabs on the VOICE and PLAY pages, the expression pedal following CC11, undo / redo, A/B, RANDOM, and the
+  organ model badge (try C-3).
+- If the plugin window feels heavy while the cabinet spins, tell me. The script costs about 0.5% of a core; WebView2's
+  drawing cost is not measured.
 
 Phase 3 notes:
 - **Signal chain after the preamp:** overdrive → wah → tape echo → tube amp → crossover → horn and drum rotors → mics

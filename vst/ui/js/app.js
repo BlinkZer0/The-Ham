@@ -11,6 +11,7 @@
   'use strict';
 
   const $ = (sel) => document.querySelector(sel);
+  const synthEl = document.querySelector('.synth');
   function el(tag, cls, html) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -48,10 +49,12 @@
 
   // A change made in this UI
   function setParam(id, v) {
+    if (!replaying && values[id] !== v && !PARAM_BY_ID[id].noPreset) remember(id);
     lastLocal[id] = performance.now();
     values[id] = v;
     if (knobs[id]) knobs[id].setValue(v);
-    (bound[id] || []).forEach(c => { if (!(c instanceof Drawbar)) c.setValue(v); });
+    // a drawbar being dragged draws itself; programmatic changes (undo, A/B, random) animate it
+    (bound[id] || []).forEach(c => { if (replaying || !(c instanceof Drawbar)) c.setValue(v); });
     engine.setParam(id, v);
     if (!PARAM_BY_ID[id].noPreset && !presetDirty) { presetDirty = true; renderPresetName(); }
     refresh(new Set([id]));
@@ -122,6 +125,7 @@
   }
 
   function loadPreset(p) {
+    remember('preset:' + p.id);
     presetDirty = false;
     current = { id: p.id, name: p.name, category: p.category };
     for (const id in lastLocal) delete lastLocal[id]; // let all incoming values through
@@ -251,6 +255,7 @@
     play: 'Organ model, tuning, motor · MIDI channels (upper 1, lower 2, pedals 3) or Split · drawbar CC maps',
     fx: 'Overdrive -> wah -> tape echo before the cabinet (the classic rock chain), spring reverb after it',
   };
+  let cabView = null;   // the animated cabinet (CABINET page)
   let activePage = location.hash.slice(1) || store.get('ham.page') || 'drawbars'; // #voice opens a page directly (tests)
   function showPage(name) {
     if (!PAGE_HINTS[name]) name = 'drawbars';
@@ -259,6 +264,7 @@
     document.querySelectorAll('.page-tab').forEach(t => t.classList.toggle('active', t.dataset.page === name));
     document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.dataset.page === name));
     $('#page-hint').textContent = PAGE_HINTS[name];
+    if (cabView) cabView.setVisible(name === 'cabinet');
     refresh(null);
   }
   document.querySelectorAll('.page-tab').forEach(t => t.addEventListener('click', () => showPage(t.dataset.page)));
@@ -388,12 +394,13 @@
     {
       const lamp = el('span', 'led perc-lamp');
       lamp.title = 'Percussion envelope';
-      const p = makePanel('PERCUSSION', [lamp, control(ToggleButton, 'percOn')]);
+      const p = makePanel('PERCUSSION', [lamp]);
       percLamp = lamp;
-      const sw = el('div', 'switch-row');
-      sw.appendChild(control(Segmented, 'percVol').el);
-      sw.appendChild(control(Segmented, 'percDecay').el);
-      sw.appendChild(control(Segmented, 'percHarm', ['2nd', '3rd']).el);
+      const sw = el('div', 'rocker-row');
+      sw.appendChild(control(Rocker, 'percOn', 'PERC', ['OFF', 'ON'], 'cream').el);
+      sw.appendChild(control(Rocker, 'percVol', 'VOLUME', ['NORMAL', 'SOFT'], 'cream').el);
+      sw.appendChild(control(Rocker, 'percDecay', 'DECAY', ['FAST', 'SLOW'], 'cream').el);
+      sw.appendChild(control(Rocker, 'percHarm', 'HARMONIC', ['SECOND', 'THIRD'], 'cream').el);
       p.appendChild(sw);
       knobRow(p, ['percFast', 'percSlow']);
       p.appendChild(el('div', 'panel-note', 'Upper manual, drawbar set B only · single trigger · cancels the 1\' bar'));
@@ -403,8 +410,9 @@
     {
       const p = makePanel('VIBRATO · CHORUS');
       const sw = el('div', 'switch-row left');
-      sw.appendChild(control(ToggleButton, 'vibUpper', 'UPPER').el);
-      sw.appendChild(control(ToggleButton, 'vibLower', 'LOWER').el);
+      sw.className = 'rocker-row';
+      sw.appendChild(control(Rocker, 'vibUpper', 'VIB SWELL', ['OFF', 'ON'], 'cream').el);
+      sw.appendChild(control(Rocker, 'vibLower', 'VIB GREAT', ['OFF', 'ON'], 'cream').el);
       p.appendChild(sw);
       p.appendChild(control(Segmented, 'vibMode').el);
       p.appendChild(el('div', 'panel-note', 'A scanner reads an 18-section delay line at 6.9 Hz · V = scanned, C = scanned + straight · percussion and pedals bypass it'));
@@ -440,6 +448,15 @@
   // ======================================================= CABINET page ====
   {
     const r1 = $('#cab-row-1'), r2 = $('#cab-row-2');
+    cabView = new CabinetView($('#cab-view'));
+    window.__cabView = cabView;   // the UI tests read its frame counter
+    const cabOpts = ['rotorConfig', 'hornType', 'cabBack', 'micLayout', 'micAngle', 'micDist', 'hornDir', 'drumDir', 'drumBaffle'];
+    refreshers.push((ids) => {
+      if (!ids || ids.has('cabModel')) cabView.setModel(values.cabModel);
+      if (!ids || cabOpts.some(id => ids.has(id)))
+        cabView.setOptions(Object.fromEntries(cabOpts.map(id => [id, Math.round(values[id] * (id === 'micDist' ? 100 : 1)) / (id === 'micDist' ? 100 : 1)])));
+      if (!ids || ids.has('drive')) cabView.setDrive(values.drive);
+    });
     {
       const p = makePanel('CABINET', control(ToggleButton, 'cabBypass', 'BYPASS'));
       // picking a model asks the host to load its defaults too
@@ -508,8 +525,8 @@
       knobRow(p, ['tuneA', 'transpose', 'ampLevel']);
       const sw = el('div', 'switch-row left');
       sw.appendChild(el('span', 'ctl-label', 'MOTOR'));
-      sw.appendChild(control(ToggleButton, 'motorStart', 'START').el);
-      sw.appendChild(control(ToggleButton, 'motorRun', 'RUN').el);
+      sw.appendChild(control(Rocker, 'motorStart', 'START', ['OFF', 'ON'], 'dark').el);
+      sw.appendChild(control(Rocker, 'motorRun', 'RUN', ['OFF', 'ON'], 'dark').el);
       sw.appendChild(el('span', 'ctl-label', 'MAINS'));
       sw.appendChild(control(Segmented, 'mains').el);
       p.appendChild(sw);
@@ -567,6 +584,136 @@
     fx('SPRING REVERB', 'revOn', ['revMix', 'revDecay', 'revTone']);
     refreshers.push(() => $('#fx-led').classList.toggle('on', values.odOn >= 0.5 || values.wahOn >= 0.5 || values.echoOn >= 0.5 || values.revOn >= 0.5));
   }
+
+  // ------------------------------------------------- undo / redo, A/B --------
+  // Snapshots of every preset parameter, taken before a change made in this UI (a drag, a
+  // wheel run or repeated clicks on one control within 0.8 s count as one step) and before
+  // a preset load. Host automation is not recorded. Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z).
+  var replaying = false;
+  const hist = { undo: [], redo: [], lastId: null, lastTime: 0 };
+  function snapshot() {
+    const o = {};
+    PARAM_DEFS.forEach(d => { if (!d.noPreset) o[d.id] = values[d.id]; });
+    return o;
+  }
+  function remember(id) {
+    const now = performance.now();
+    if (id && id === hist.lastId && now - hist.lastTime < 800) { hist.lastTime = now; return; }
+    hist.undo.push(snapshot());
+    if (hist.undo.length > 100) hist.undo.shift();
+    hist.redo.length = 0;
+    hist.lastId = id; hist.lastTime = now;
+    renderHistory();
+  }
+  function restore(snap) {
+    replaying = true;
+    try { for (const id in snap) if (values[id] !== snap[id]) setParam(id, snap[id]); }
+    finally { replaying = false; }
+    hist.lastId = null;
+    refresh(null);
+  }
+  function undo() {
+    if (!hist.undo.length) return;
+    hist.redo.push(snapshot());
+    restore(hist.undo.pop());
+    renderHistory();
+    logMidi('Undo');
+  }
+  function redo() {
+    if (!hist.redo.length) return;
+    hist.undo.push(snapshot());
+    restore(hist.redo.pop());
+    renderHistory();
+    logMidi('Redo');
+  }
+  function renderHistory() {
+    $('#undo-btn').disabled = !hist.undo.length;
+    $('#redo-btn').disabled = !hist.redo.length;
+  }
+  $('#undo-btn').addEventListener('click', undo);
+  $('#redo-btn').addEventListener('click', redo);
+  window.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+  });
+
+  // A/B compare: two complete settings; switching stores the current one in its slot.
+  const ab = { active: 'A', A: null, B: null };
+  function abSwitch(slot) {
+    if (slot === ab.active) return;
+    ab[ab.active] = snapshot();
+    if (!ab[slot]) ab[slot] = snapshot();
+    remember('ab');
+    restore(ab[slot]);
+    ab.active = slot;
+    renderAb();
+    logMidi(`Comparing: ${slot}`);
+  }
+  function renderAb() {
+    $('#ab-a').classList.toggle('on', ab.active === 'A');
+    $('#ab-b').classList.toggle('on', ab.active === 'B');
+    $('#ab-copy').textContent = ab.active === 'A' ? 'A→B' : 'B→A';
+  }
+  $('#ab-a').addEventListener('click', () => abSwitch('A'));
+  $('#ab-b').addEventListener('click', () => abSwitch('B'));
+  $('#ab-copy').addEventListener('click', () => {
+    const other = ab.active === 'A' ? 'B' : 'A';
+    ab[other] = snapshot();
+    logMidi(`Copied ${ab.active} to ${other}`);
+  });
+
+  // ----------------------------------------------------- randomize drawbars ---
+  // A random registration inside a family (The Ham's rules: [min, max] per footage,
+  // 16' .. 1'), on the active set of the chosen manual (set B when a fixed preset key is down).
+  const FAMILIES = {
+    FLUTE:    [[0, 3], [0, 2], [6, 8], [0, 6], [0, 3], [0, 4], [0, 0], [0, 2], [0, 3]],
+    DIAPASON: [[2, 6], [0, 3], [6, 8], [5, 8], [2, 5], [3, 6], [0, 3], [0, 3], [0, 3]],
+    REED:     [[0, 4], [0, 2], [5, 8], [3, 7], [5, 8], [3, 6], [4, 8], [2, 6], [0, 4]],
+    STRING:   [[0, 2], [0, 0], [3, 6], [4, 7], [5, 8], [5, 8], [4, 7], [4, 7], [3, 6]],
+    JAZZ:     [[8, 8], [6, 8], [8, 8], [0, 8], [0, 4], [0, 4], [0, 2], [0, 3], [0, 8]],
+  };
+  let randomManual = 0;
+  {
+    const tools = $('#db-tools');
+    tools.appendChild(el('span', 'ctl-label', 'RANDOM'));
+    const which = new Segmented({ name: 'Randomize manual', def: 0 }, 0, (i) => { randomManual = i; which.setValue(i); }, ['UPPER', 'LOWER']);
+    tools.appendChild(which.el);
+    Object.keys(FAMILIES).forEach(fam => {
+      const b = el('button', 'pd-btn small', fam);
+      b.type = 'button';
+      b.title = `A random ${fam.toLowerCase()} registration on the ${'active set'}`;
+      b.addEventListener('click', () => {
+        const m = randomManual, key = Math.round(values[m ? 'loKey' : 'upKey']);
+        const set = key === 10 ? 0 : 1;
+        remember('random');
+        replaying = true;
+        try {
+          FAMILIES[fam].forEach(([lo, hi], f) => setParam(drawbarId(m, set, f), lo + Math.floor(Math.random() * (hi - lo + 1))));
+        } finally { replaying = false; }
+        sets[m].forEach(x => x.renderString());
+        logMidi(`Random ${fam.toLowerCase()}: ${registrationString(FOOTAGES.map((_, f) => values[drawbarId(m, set, f)]))}`);
+      });
+      tools.appendChild(b);
+    });
+  }
+
+  // ---------------------------------------------------- organ model badge ---
+  // C-3: the same instrument in a churchier case (closed sides) - it changes only the look.
+  const CONSOLES = [
+    { name: 'B-3', svg: '<rect x="3" y="4" width="30" height="12" rx="1"/><rect x="5" y="16" width="26" height="3"/><rect x="4" y="19" width="2" height="11"/><rect x="30" y="19" width="2" height="11"/><rect x="10" y="27" width="16" height="2"/>' },
+    { name: 'C-3', svg: '<path d="M3 30 V7 Q18 0 33 7 V30 Z"/><rect class="cb-hole" x="8" y="11" width="20" height="4"/><rect class="cb-hole" x="11" y="20" width="14" height="7" rx="1"/>' },
+    { name: 'A-100', svg: '<rect x="3" y="4" width="30" height="26" rx="1"/><rect class="cb-hole" x="7" y="8" width="22" height="4"/><circle class="cb-hole" cx="12" cy="22" r="4"/><circle class="cb-hole" cx="24" cy="22" r="4"/>' },
+    { name: 'M-3', svg: '<rect x="6" y="10" width="24" height="9" rx="1"/><rect x="6" y="19" width="24" height="2"/><rect x="7" y="21" width="2" height="9"/><rect x="27" y="21" width="2" height="9"/>' },
+  ];
+  refreshers.push((ids) => {
+    if (ids && !ids.has('organModel')) return;
+    const m = clamp(Math.round(values.organModel), 0, 3);
+    $('#console-badge').innerHTML = `<svg viewBox="0 0 36 32" aria-hidden="true">${CONSOLES[m].svg}</svg><span>${CONSOLES[m].name}</span>`;
+    $('#console-badge').title = `Organ model: ${CONSOLES[m].name}${m === 1 ? ' (sounds like the B-3; only the case differs)' : ''}`;
+    synthEl.classList.toggle('model-c3', m === 1);
+  });
 
   // ---------------------------------------------------------- notes / UI ---
   const monitor = $('#midi-monitor');
@@ -654,11 +801,9 @@
 
   // ------------------------------------------------- expression pedal ------
   let exprDragging = false;
-  const exprPedal = new ModWheel((v) => engine.expression(v), (b) => { exprDragging = b; }, 'EXPR', 'Expression pedal');
-  exprPedal.el.title = 'Expression (swell) pedal: also follows CC11 (or the Expression CC). Closing it cuts the mids and treble more than the bass.';
-  exprPedal.setValue(1);
+  const exprPedal = new ExpressionPedal((v) => engine.expression(v), (b) => { exprDragging = b; });
+  exprPedal.el.title = 'Expression (swell) pedal: toe down = open. Follows CC11 (or the Expression CC). Closing it cuts the mids and treble more than the bass.';
   $('#expr-slot').replaceWith(exprPedal.el);
-  exprPedal.svg.addEventListener('dblclick', () => { exprPedal.set(1, true); });
 
   // ----------------------------------------------------------- MIDI learn ------
   // LEARN on: click a control to arm it, then move a knob or fader on your controller.
@@ -698,8 +843,9 @@
 
   // rotors: rpm readout (the animated cabinet drawing comes in phase 4)
   const rpmEl = $('#rpm-readout');
-  engine.on('rotor', ({ hornHz, drumHz }) => {
-    if (rpmEl) rpmEl.textContent = `HORN ${Math.round(hornHz * 60)} · DRUM ${Math.round(drumHz * 60)} rpm`;
+  engine.on('rotor', (r) => {
+    if (rpmEl) rpmEl.textContent = `HORN ${Math.round(r.hornHz * 60)} · DRUM ${Math.round(r.drumHz * 60)} rpm`;
+    if (cabView) cabView.setRotor(r);
   });
 
   // ------------------------------------------------------------- stats -----
@@ -768,6 +914,8 @@
   });
 
   // -------------------------------------------------------------- init -----
+  renderHistory();
+  renderAb();
   renderPresetName();
   renderBrowser();
   showPage(activePage);

@@ -214,7 +214,7 @@ presets in localStorage or a linked folder. `dsp-worklet.js` is one self-contain
 | `--parity <scenarios.json>` | C++ render of each scenario: RMS per window + peak as JSON |
 | `tests\run-parity.ps1` | the same scenarios in headless Edge through `dsp-worklet.js`, compared per window (tolerance 1e-4, as in Brass Knuckles) |
 | `--bench`, `--loudness`, `--render`, `--render-all`, `--host-check` | as in Brass Knuckles |
-| `tests\run-ui-tests.ps1` | the web build in headless Edge, from disk and served |
+| `tests\run-ui-tests.ps1` | the web build in headless Edge, from disk and served. **The Ham:** committed in phase 4 for the plugin UI (mocked bridge, served in real time so requestAnimationFrame runs; checks the cabinet animation against the `rotor` events); phase 6 adds the web build |
 
 Scenarios: `{ name, preset?, params?, blocks, events: [[block, type, …]] }`.
 

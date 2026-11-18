@@ -131,3 +131,42 @@ int runHostCheck (const juce::String& path)
     std::printf (fails == 0 ? "HOST CHECK PASSED\n" : "HOST CHECK: %d FAILURE(S)\n", fails);
     return fails == 0 ? 0 : 1;
 }
+
+// --host-cab <path>: the built plugin, the same chord with the Cabinet parameter at each model.
+int runHostCab (const juce::String& path)
+{
+    juce::VST3PluginFormat format;
+    juce::OwnedArray<juce::PluginDescription> types;
+    format.findAllTypesForFile (types, path);
+    if (types.isEmpty()) return 1;
+    juce::String error;
+    std::vector<std::vector<float>> outs;
+    for (int m = 0; m < 4; ++m)
+    {
+        auto plugin = format.createInstanceFromDescription (*types[0], 48000.0, 512, error);
+        if (plugin == nullptr) return 1;
+        for (auto* p : plugin->getParameters())
+            if (p->getName (64) == "Cabinet") p->setValueNotifyingHost ((float) m / 3.0f);
+        plugin->setPlayConfigDetails (0, 2, 48000.0, 512);
+        plugin->prepareToPlay (48000.0, 512);
+        juce::AudioBuffer<float> buf (2, 512);
+        std::vector<float> out;
+        for (int b = 0; b < 200; ++b)
+        {
+            juce::MidiBuffer midi;
+            if (b == 2) for (int n : { 60, 64, 67 }) midi.addEvent (juce::MidiMessage::noteOn (1, n, (juce::uint8) 100), 0);
+            buf.clear();
+            plugin->processBlock (buf, midi);
+            for (int i = 0; i < 512; ++i) out.push_back (buf.getSample (0, i));
+        }
+        outs.push_back (out);
+        plugin->releaseResources();
+    }
+    for (int m = 1; m < 4; ++m)
+    {
+        double d = 0, r = 0;
+        for (size_t i = 48000; i < outs[0].size(); ++i) { d += (outs[m][i] - outs[0][i]) * (outs[m][i] - outs[0][i]); r += outs[0][i] * outs[0][i]; }
+        std::printf ("plugin, Cabinet %d vs 0: difference %.1f dB below the signal%s\n", m, 10 * std::log10 (r / std::max (d, 1e-30)), d == 0 ? " (IDENTICAL)" : "");
+    }
+    return 0;
+}

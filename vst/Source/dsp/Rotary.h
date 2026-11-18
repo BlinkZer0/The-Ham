@@ -54,6 +54,7 @@ public:
         w = 0;
         for (auto& r : rotor) r = {};
         for (auto& f : xo) f.reset();
+        for (auto& v : voice) v.reset();
         box.reset();
         configured = false;
     }
@@ -78,6 +79,11 @@ public:
         xo[2].setHighpass (s.xover, 0.7071067811865476, sr);
         xo[3].setHighpass (s.xover, 0.7071067811865476, sr);
         box.setPeak (M.boxHz, M.boxQ, M.boxDb * (s.cabBack == 1 ? 0.3 : 1.0), sr);
+        voice[0].setHighpass (M.spkHpHz, 0.5412, sr);
+        voice[1].setHighpass (M.spkHpHz, 1.3066, sr);
+        voice[2].setLowpass (std::min (M.spkLpHz, 0.45 * sr), 0.5412, sr);
+        voice[3].setLowpass (std::min (M.spkLpHz, 0.45 * sr), 1.3066, sr);
+        voice[4].setPeak (M.midHz, M.midQ, M.midDb, sr);
         hornGain = s.balance > 0 ? 1.0 : 1.0 + s.balance;
         drumGain = s.balance < 0 ? 1.0 : 1.0 - s.balance;
         outGain = M.outGain;
@@ -94,6 +100,8 @@ public:
 
     void process (double x, double& L, double& R)
     {
+        // the speakers' band and the cabinet's colour
+        for (auto& v : voice) x = v.process (x);
         // crossover: LR4 = two Butterworth sections each way
         double lo, hi;
         const int cfg = settings.rotorConfig;
@@ -247,6 +255,7 @@ private:
     std::array<std::vector<double>, 2> buf;
     int mask = 0, w = 0;
     std::array<Biquad, 4> xo {};
+    std::array<Biquad, 5> voice {};   // speaker high-pass (2), low-pass (2), cabinet colour peak
     Biquad box;
     std::array<RotorPhasor, 2> rotor {};
     std::array<std::array<Pickup, kMaxPickups>, 2> pickups {};
