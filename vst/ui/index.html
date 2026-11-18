@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Ham</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="plugin">
+  <!-- shared SVG defs: cream knob face with a chrome rim, cream drawbar shaft, chrome tip ring -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <radialGradient id="knobFace" cx="38%" cy="30%" r="80%">
+        <stop offset="0%" stop-color="#fbf5e6"/>
+        <stop offset="55%" stop-color="#e2d4b3"/>
+        <stop offset="100%" stop-color="#9d917a"/>
+      </radialGradient>
+      <linearGradient id="dbShaft" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#bdb19a"/>
+        <stop offset="35%" stop-color="#f6efdc"/>
+        <stop offset="70%" stop-color="#e6dbc2"/>
+        <stop offset="100%" stop-color="#a99d86"/>
+      </linearGradient>
+      <linearGradient id="dbChrome" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#6b6d70"/>
+        <stop offset="40%" stop-color="#f7f7f5"/>
+        <stop offset="100%" stop-color="#7d7f83"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <main class="synth">
+    <header class="topbar">
+      <div class="brand">
+        <svg class="brand-logo" viewBox="0 0 34 34" aria-hidden="true">
+          <rect class="bl-rail" x="2" y="4" width="30" height="2.5" rx="1"/>
+          <rect class="bl-bar b" x="4" y="6.5" width="6" height="20" rx="2"/>
+          <rect class="bl-bar" x="11.5" y="6.5" width="6" height="25" rx="2"/>
+          <rect class="bl-bar k" x="19" y="6.5" width="6" height="13" rx="2"/>
+          <rect class="bl-bar" x="26.5" y="6.5" width="5" height="17" rx="2"/>
+        </svg>
+        <div class="brand-text">
+          <span class="brand-mark">THE HAM</span>
+          <span class="brand-sub">TONEWHEEL ORGAN · ROTARY CABINET</span>
+        </div>
+      </div>
+      <div class="patch-display">
+        <button id="preset-prev" type="button" class="pd-step" aria-label="Previous preset">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8 2 4 6l4 4"/></svg>
+        </button>
+        <div class="pd-text">
+          <span id="preset-cat" class="pd-label">PRESET</span>
+          <span id="preset-name" class="pd-name"></span>
+        </div>
+        <button id="preset-next" type="button" class="pd-step" aria-label="Next preset">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="m4 2 4 4-4 4"/></svg>
+        </button>
+      </div>
+      <div class="preset-actions">
+        <button id="preset-save" type="button" class="pd-btn">SAVE</button>
+        <button id="preset-load" type="button" class="pd-btn">LOAD</button>
+        <button id="preset-folder" type="button" class="pd-btn" title="Open the preset folder">FOLDER</button>
+      </div>
+      <div class="top-controls">
+        <label class="midi-pick web-only">
+          <span class="ctl-label">MIDI IN</span>
+          <select id="midi-select"><option>Detecting…</option></select>
+        </label>
+        <span class="indicator"><span class="led" id="midi-led" title="Note activity"></span>MIDI</span>
+        <span class="indicator"><span class="led" id="sustain-led"></span>SUS</span>
+        <span class="indicator" title="Expression pedal (CC11)">EXPR <span class="mini-meter"><div id="expr-mini"></div></span></span>
+        <span class="indicator" title="Tonewheel motor speed"><span class="led on" id="motor-led"></span>MOTOR</span>
+        <button id="panic-btn" type="button" class="panic">PANIC</button>
+      </div>
+    </header>
+
+    <section class="browser" aria-label="Presets">
+      <div class="cat-tabs" id="cat-tabs" role="tablist"></div>
+      <div class="preset-grid" id="preset-grid"></div>
+    </section>
+
+    <nav class="page-tabs" role="tablist" aria-label="Sections">
+      <button type="button" class="page-tab" data-page="drawbars" role="tab">DRAWBARS</button>
+      <button type="button" class="page-tab" data-page="voice" role="tab"><span class="led" id="voice-led"></span>VOICE</button>
+      <button type="button" class="page-tab" data-page="cabinet" role="tab"><span class="led" id="cabinet-led"></span>CABINET</button>
+      <button type="button" class="page-tab" data-page="play" role="tab"><span class="led" id="play-led"></span>PLAY · MIDI</button>
+      <button type="button" class="page-tab" data-page="fx" role="tab"><span class="led" id="fx-led"></span>FX</button>
+      <span class="page-hint" id="page-hint"></span>
+    </nav>
+    <div class="pages">
+      <div class="page" data-page="drawbars">
+        <section class="db-stage" id="db-stage"></section>
+        <div class="db-legend">
+          <span>Drag a bar down to pull it out · Shift = continuous · wheel / arrows / 0-8 · double-click = default</span>
+          <span>Type a registration (888000000) and press Enter</span>
+        </div>
+      </div>
+      <div class="page" data-page="voice">
+        <section class="row voice-row-1" id="voice-row-1"></section>
+        <section class="row voice-row-2" id="voice-row-2"></section>
+      </div>
+      <div class="page" data-page="cabinet">
+        <section class="row cab-row-1" id="cab-row-1"></section>
+        <section class="row cab-row-2" id="cab-row-2"></section>
+      </div>
+      <div class="page" data-page="play">
+        <section class="row play-row-1" id="play-row-1"></section>
+        <section class="row play-row-2" id="play-row-2"></section>
+      </div>
+      <div class="page" data-page="fx">
+        <section class="row fx-row-1" id="fx-row-1"></section>
+      </div>
+    </div>
+
+    <section class="keybed">
+      <div class="kb-side">
+        <span class="ctl-label">OCTAVE</span>
+        <div class="oct-buttons">
+          <button id="oct-down" type="button" aria-label="Octave down">−</button>
+          <button id="oct-up" type="button" aria-label="Octave up">+</button>
+        </div>
+        <span id="octave-readout" class="oct-readout"></span>
+        <span class="kbd-hint">Keys A–' play<br>the upper manual<br>Z / X octave</span>
+      </div>
+      <div class="kb-rows">
+        <div class="kb-row"><div id="pk-upper"></div><div id="kb-upper"></div></div>
+        <div class="kb-row"><div id="pk-lower"></div><div id="kb-lower"></div></div>
+        <div class="pedal-row"><div id="kb-pedal"></div></div>
+      </div>
+    </section>
+
+    <footer class="statusbar">
+      <span id="midi-monitor" class="monitor">Connecting to plugin…</span>
+      <span class="audio-status"><span class="led" id="audio-led"></span><span id="audio-info">—</span></span>
+    </footer>
+  </main>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card">
+      <div id="modal-title" class="modal-title"></div>
+      <div id="modal-body" class="modal-body"></div>
+      <input id="modal-input" type="text" maxlength="60" spellcheck="false" autocomplete="off">
+      <div class="modal-actions">
+        <button id="modal-cancel" type="button" class="pd-btn">CANCEL</button>
+        <button id="modal-ok" type="button" class="pd-btn primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/params.js"></script>
+  <script src="js/engine-juce.js"></script>
+  <script src="js/knob.js"></script>
+  <script src="js/controls.js"></script>
+  <script src="js/drawbar.js"></script>
+  <script src="js/piano.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
