@@ -253,7 +253,7 @@
     voice: 'Percussion: set B, single trigger · scanner V1-V3 / C1-C3 per manual · leakage and Age per manual · Drive into the cabinet amp',
     cabinet: 'Picking a cabinet loads its speeds, rotors and mics · every option stays editable · mod wheel above the middle = Fast',
     play: 'Organ model, tuning, motor · MIDI channels (upper 1, lower 2, pedals 3) or Split · drawbar CC maps',
-    fx: 'Overdrive -> wah -> tape echo before the cabinet (the classic rock chain), spring reverb after it',
+    fx: 'Overdrive → wah → tape echo before the cabinet (the classic rock chain), spring reverb after it',
   };
   let cabView = null;   // the animated cabinet (CABINET page)
   let activePage = location.hash.slice(1) || store.get('ham.page') || 'drawbars'; // #voice opens a page directly (tests)
@@ -287,6 +287,11 @@
     const f = el('div', 'field', `<span class="ctl-label">${label}</span>`);
     f.appendChild(ctl.el);
     return f;
+  }
+  function headGroup(...items) {   // a label and a control side by side, right-aligned in a panel head
+    const g = el('div', 'head-group');
+    items.forEach(x => g.appendChild(x.el || x));
+    return g;
   }
   function fields(parent, list, three) {
     const g = el('div', 'field-grid' + (three ? ' three' : ''));
@@ -485,16 +490,23 @@
         + '<span class="rpm" id="rpm-readout">—</span>');
       lamps.title = 'The speed the rotors are heading for (from the switch, the mod wheel, a CC or the sustain pedal)';
       p.appendChild(lamps);
-      r1.appendChild(p);
+      // speed control: what else switches the speed
+      p.appendChild(el('div', 'sub-title', 'SPEED CONTROL'));
+      p.appendChild(field('Mod Wheel', control(Segmented, 'speedWheel', ['Off', 'Half', 'Mom.'])));
+      p.appendChild(field('Variable', control(SelectBox, 'varSource')));
+      const sus = control(ToggleButton, 'speedSustain', 'SUS PEDAL');
+      sus.el.title = 'The sustain pedal switches the speed';
+      const row = el('div', 'switch-row');
+      addKnob(row, 'speedCC');
+      row.appendChild(sus.el);
+      p.appendChild(row);
+      $('.cab-controls').prepend(p);
     }
     {
-      const p = makePanel('HORN');
+      const p = makePanel('HORN', control(ToggleButton, 'brakePos', 'STOP AT ANGLE'));
       knobRow(p, ['hornSlow', 'hornFast', 'hornAccel', 'hornBrake', 'brakeAngle']);
       fields(p, [['Speed', control(SelectBox, 'hornSpeedSel')], ['Direction', control(Segmented, 'hornDir')],
                  ['Horns', control(SelectBox, 'hornType')], ['Mouth', control(Segmented, 'hornMouth')]]);
-      const sw = el('div', 'switch-row left');
-      sw.appendChild(control(ToggleButton, 'brakePos', 'STOP AT ANGLE').el);
-      p.appendChild(sw);
       r1.appendChild(p);
     }
     {
@@ -505,24 +517,16 @@
       r1.appendChild(p);
     }
     {
-      const p = makePanel('SPEAKERS');
+      const os = control(Segmented, 'ampOS');
+      os.el.title = 'Amp oversampling';
+      const p = makePanel('SPEAKERS', os);
       knobRow(p, ['xover', 'hornDrumBal']);
-      fields(p, [['Back', control(Segmented, 'cabBack')], ['Amp OS', control(Segmented, 'ampOS')]]);
+      fields(p, [['Back', control(Segmented, 'cabBack')]]);
       r2.appendChild(p);
     }
     {
-      const p = makePanel('MICS');
-      p.appendChild(control(Segmented, 'micLayout').el);
+      const p = makePanel('MICS', control(Segmented, 'micLayout'));
       knobRow(p, ['micDist', 'micAngle', 'micHorn', 'micDrum', 'micRoom', 'width']);
-      r2.appendChild(p);
-    }
-    {
-      const p = makePanel('SPEED CONTROL');
-      fields(p, [['Mod Wheel', control(Segmented, 'speedWheel', ['Off', 'Half', 'Mom.'])], ['Variable', control(SelectBox, 'varSource')]]);
-      knobRow(p, ['speedCC']);
-      const sw = el('div', 'switch-row left');
-      sw.appendChild(control(ToggleButton, 'speedSustain', 'SUSTAIN PEDAL').el);
-      p.appendChild(sw);
       r2.appendChild(p);
     }
     refreshers.push(() => $('#cabinet-led').classList.toggle('on', values.cabBypass < 0.5));
@@ -558,21 +562,16 @@
       r1.appendChild(p);
     }
     {
-      const p = makePanel('CONTROLLERS');
-      fields(p, [['Drawbar CC map', control(SelectBox, 'ccMap')]]);
+      const ccMap = control(SelectBox, 'ccMap');
+      ccMap.el.title = 'Drawbar CC map';
+      const p = makePanel('CONTROLLERS', [headGroup(el('span', 'ctl-label', 'DRAWBAR CC'), ccMap), control(ToggleButton, 'ksOn', 'PRESET KEYSWITCHES')]);
       knobRow(p, ['exprCC', 'motorCC']);
-      const sw = el('div', 'switch-row left');
-      sw.appendChild(control(ToggleButton, 'ksOn', 'PRESET KEYSWITCHES').el);
-      p.appendChild(sw);
       p.appendChild(el('div', 'panel-note', 'Drawbar CCs move the active set of each manual. Motor Off CC: value ≥ 64 = power off (pitch dive).'));
       r2.appendChild(p);
     }
     {
-      const p = makePanel('SPLIT (ONE KEYBOARD)', control(ToggleButton, 'splitMode'));
+      const p = makePanel('SPLIT (ONE KEYBOARD)', [control(ToggleButton, 'pedalZone', 'PEDAL ZONE'), control(ToggleButton, 'splitMode')]);
       knobRow(p, ['splitPoint', 'splitLoOct', 'pedalSplit']);
-      const sw = el('div', 'switch-row left');
-      sw.appendChild(control(ToggleButton, 'pedalZone', 'PEDAL ZONE').el);
-      p.appendChild(sw);
       p.appendChild(el('div', 'panel-note', 'On the upper channel: lower manual below the split point, upper above; pedals below the pedal split.'));
       onOff(p, 'splitMode');
       r2.appendChild(p);
@@ -583,18 +582,37 @@
   // =========================================================== FX page =====
   {
     const r1 = $('#fx-row-1');
-    const fx = (title, onId, ids, extra) => {
-      const p = makePanel(title, control(ToggleButton, onId));
+    const fx = (title, onId, ids, head) => {
+      const p = makePanel(title, [...(head || []), control(ToggleButton, onId)]);
       knobRow(p, ids);
-      if (extra) extra(p);
       onOff(p, onId);
       r1.appendChild(p);
     };
     fx('OVERDRIVE', 'odOn', ['odDrive', 'odTone', 'odLevel']);
-    fx('WAH', 'wahOn', ['wahPos', 'wahCC'], (p) => fields(p, [['Source', control(SelectBox, 'wahSrc')]]));
+    const wahSrc = control(SelectBox, 'wahSrc');
+    wahSrc.el.title = 'What moves the wah';
+    fx('WAH', 'wahOn', ['wahPos', 'wahCC'], [headGroup(el('span', 'ctl-label', 'SOURCE'), wahSrc)]);
     fx('TAPE ECHO', 'echoOn', ['echoTime', 'echoFb', 'echoMix', 'echoWow', 'echoTone']);
     fx('SPRING REVERB', 'revOn', ['revMix', 'revDecay', 'revTone']);
     refreshers.push(() => $('#fx-led').classList.toggle('on', values.odOn >= 0.5 || values.wahOn >= 0.5 || values.echoOn >= 0.5 || values.revOn >= 0.5));
+    // the signal chain, with a lamp per stage that is in circuit
+    const chain = $('#fx-chain');
+    const stages = [['odOn', 'OVERDRIVE'], ['wahOn', 'WAH'], ['echoOn', 'TAPE ECHO'], ['cab', 'ROTARY CABINET'], ['revOn', 'SPRING REVERB']];
+    chain.appendChild(el('span', 'fx-end', 'ORGAN'));
+    stages.forEach(([id, name]) => {
+      chain.appendChild(el('span', 'fx-arrow', '→'));
+      const node = el('span', 'fx-node', `<span class="led"></span>${name}`);
+      node.dataset.stage = id;
+      chain.appendChild(node);
+    });
+    chain.appendChild(el('span', 'fx-arrow', '→'));
+    chain.appendChild(el('span', 'fx-end', 'OUT'));
+    refreshers.push(() => chain.querySelectorAll('.fx-node').forEach(n => {
+      const id = n.dataset.stage;
+      const on = id === 'cab' ? values.cabBypass < 0.5 : values[id] >= 0.5;
+      n.classList.toggle('on', on);
+      n.querySelector('.led').classList.toggle('on', on);
+    }));
   }
 
   // ------------------------------------------------- undo / redo, A/B --------

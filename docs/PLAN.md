@@ -53,6 +53,24 @@ Phase 5 notes:
   `--host-check` (50 programs), `--host-rotor` (6), `--host-cab`, `check-params.ps1` (143), the UI tests (28: the
   speed switch's greyed segments added), `--bench`: **4.9%** of one core, one key 3.3%.
 
+UI restyle (2026-11-18, "beautify the UI"), CSS and layout only, every widget and test unchanged:
+- **A control plate.** The pages sit on a crinkle-black plate let into the walnut, the active tab joined to it, and
+  every page fills it: rows share the leftover height, knob rows centre in their panel. Before, each page was as tall
+  as the tallest (CABINET) and the shorter ones (FX most of all) showed bare wood under their panels.
+- **Hierarchy.** Panels got a lit top edge, a ruled title, and condensed Bahnschrift lettering for labels, titles,
+  tabs and buttons; readouts are amber mono on black (the preset display is an LCD with the category above the name).
+  Knobs grew to 56 px with a chrome rim and a shadow; keys are ivory / ebony gradients, pedals maple; the header's
+  SAVE / LOAD / FOLDER and undo / redo / A / B are joined button bars.
+- **Layout.** FX is 2 × 2 with a signal-chain strip (ORGAN → OVERDRIVE → WAH → TAPE ECHO → ROTARY CABINET →
+  SPRING REVERB → OUT) whose lamps show what is in circuit. The CABINET page's speed controls (mod wheel, variable
+  source, speed CC, sustain pedal) joined the CABINET panel as one column beside HORN / DRUM and SPEAKERS / MICS, so
+  Horn's five and Mics' six knobs sit on one line. Lone switches (Stop at Angle, Drum Off, Preset Keyswitches, Pedal
+  Zone, Wah Source, Amp OS, Mic layout) moved into their panel heads. Drawbars are 28 px wide (were 26), centred
+  in their well; the preset-key registration cells share the row width.
+- **Scale.** The keys are shorter (62 / 70 px in the SVG, were 78 / 92), and with the shorter pages the console is
+  about 1030 px tall instead of 1230: the plugin window (1120 × 960) now scales it by ~0.89 instead of ~0.77, so the
+  lettering is 15% larger in the host. Checked: the UI tests (28 ok), the five screenshots re-captured.
+
 What to listen for in Minihost Modular (phase 5):
 - Run `vst\install.bat` first (the installed plugin is older than the last cabinet voicing).
 - **Chorus vs rotor.** Load *Jazz / Trio Classic* (C3 upper, Rotor 22 Slow): switch VIB SWELL off on the VOICE page

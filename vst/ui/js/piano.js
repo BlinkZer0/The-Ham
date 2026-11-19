@@ -25,7 +25,7 @@ class Manual {
 
   build(container) {
     const p = this.pedal;
-    const WW = p ? 44 : 20, WH = p ? 92 : 78, BW = p ? 22 : 12, BH = p ? 52 : 48, TOP = 3;
+    const WW = p ? 44 : 20, WH = p ? 70 : 62, BW = p ? 22 : 12, BH = p ? 42 : 38, TOP = 3;
     const whites = [], blacks = [];
     let wi = 0;
     for (let i = 0; i < this.numKeys; i++) {
@@ -98,7 +98,7 @@ class Manual {
 class PresetKeys {
   // onPick(index 0..11)
   constructor(container, onPick) {
-    const WW = 20, WH = 78, BW = 12, BH = 48, TOP = 3;
+    const WW = 20, WH = 62, BW = 12, BH = 38, TOP = 3;
     const whites = [], blacks = [];
     let wi = 0;
     const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];

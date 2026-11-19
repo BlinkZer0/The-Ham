@@ -118,7 +118,7 @@ There is no voice allocation: the cost is the 91 wheels plus one dot product per
 | `TheHamTests.exe --render "<Category/Name>" out.wav [demo\|chord\|gliss\|click]` | offline render of a preset |
 | `TheHamTests.exe --render-all <folder>` | every preset, demo phrase |
 | `TheHamTests.exe --dump-params` | the C++ parameter table as JSON |
-| `powershell -File tests\run-ui-tests.ps1` | 25 UI checks in headless Edge (served, real time, mocked bridge): drawbars, registration strings, preset keys, keyboards, host params / notes, the registration editor, MIDI learn, expression pedal, rocker tabs, undo / redo, A/B, randomize, organ badge, cabinet picker; the cabinet drawing settles on reported angles, tracks a horn spinning at 6.7 Hz within 0.2° (97 frames in 1.5 s, 0.09 ms of script per frame), draws nothing when idle or off its page |
+| `powershell -File tests\run-ui-tests.ps1` | 28 UI checks in headless Edge (served, real time, mocked bridge): drawbars, registration strings, preset keys, keyboards, host params / notes, the registration editor, MIDI learn, expression pedal, rocker tabs, undo / redo, A/B, randomize, organ badge, cabinet picker; the cabinet drawing settles on reported angles, tracks a horn spinning at 6.7 Hz within 0.2° (97 frames in 1.5 s, 0.09 ms of script per frame), draws nothing when idle or off its page |
 | `powershell -File tests\check-params.ps1` | `params.js` matches `Params.h` exactly (order, IDs, ranges, defaults, units, choices) |
 | `powershell -File tests\level-match.ps1` | re-renders every preset and rewrites its `ampLevel` to the loudness target |
 

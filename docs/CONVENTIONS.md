@@ -163,6 +163,15 @@ Inherited unchanged. `ui/js/engine-juce.js` wraps `window.__JUCE__.backend` in a
 - New identity, same widget family: **dark walnut and oxblood wood chassis, cream and chrome hardware, warm amber
   accent** (`--bg`, `--panel` wood tones, `--cream`, `--chrome`, `--accent` amber). Nothing reuses the gunmetal
   and brass palette.
+- The pages sit on a **crinkle-black control plate** let into the wood (`--plate`); the active page tab joins it.
+  Every page fills the plate: rows share the leftover height and a panel's knob row centres in what it gets, so no
+  bare wood shows under a short page. Lone switches live in their panel's head, not in a row of their own.
+- Lettering: **Bahnschrift** (semi-condensed, like an engraved panel) for labels, titles, tabs and buttons via
+  `--label`; Segoe UI (`--sans`) for prose; Cascadia Mono (`--mono`) for readouts, amber on black like an LCD.
+- Knobs: cream face, chrome rim (`#knobRim`), oxblood pointer, amber value arc. Keys: ivory and ebony gradients
+  (`#ivoryKey`, `#ebonyKey`), maple pedals (`#pedalWood`). The shared gradients are `<defs>` in `index.html`.
+- The console is laid out at 1240 px wide and about 1030 px tall; the plugin window (1120 × 960) scales it to about
+  0.89. Keep it under that height or the lettering shrinks.
 - **`Drawbar`** (`drawbar.js`) follows the `Knob` pattern (same gesture, wheel, arrow and double-click handling), but
   it is drawn as a real drawbar: a shaft that pulls *down* out of the panel, numbered 1–8 as it comes out, 9 detents,
   and a tip coloured by footage (brown, white or black). Changes from presets animate over about 150 ms. Above each
