@@ -207,3 +207,94 @@ int runBench()
     std::printf ("bench: one key: %.1f%% of one core\n", 100.0 * ms1 / (seconds * 1000.0));
     return 0;
 }
+
+// --mod-probe: what modulates the sound, and how much. The scanner chorus and the rotors are both
+// periodic modulations near 7 Hz; this prints the envelope swing (dB) and rate (Hz) of a held 880 Hz
+// tone and of a chord under each, so a chorus that masquerades as a rotor shows up as a number.
+int runModProbe()
+{
+    auto envelope = [] (const Audio& a, double t0, double t1)
+    {
+        std::vector<double> e;
+        for (int s = sec (t0); s + 240 <= std::min (a.size(), sec (t1)); s += 96) e.push_back (rms (a, s, s + 240));
+        return e;
+    };
+    auto swing = [] (const std::vector<double>& e) { double lo = 1e9, hi = 0; for (double x : e) { lo = std::min (lo, x); hi = std::max (hi, x); } return db (hi / lo); };
+    auto rate = [] (const std::vector<double>& e)
+    {
+        const double fs = kSr / 96.0;
+        double mean = 0; for (double x : e) mean += x; mean /= (double) std::max<size_t> (1, e.size());
+        double best = 0, bestP = -1;
+        for (double f = 0.3; f <= 15.0; f += 0.02)
+        {
+            double re = 0, im = 0;
+            for (size_t i = 0; i < e.size(); ++i) { const double w = kTwoPi * f * (double) i / fs; re += (e[i] - mean) * std::cos (w); im -= (e[i] - mean) * std::sin (w); }
+            if (re * re + im * im > bestP) { bestP = re * re + im * im; best = f; }
+        }
+        return best;
+    };
+    auto base = [] (bool chord)
+    {
+        auto v = defaultValues();
+        for (int m = 0; m < 2; ++m) for (int st = 0; st < 2; ++st) setBars (v, m, st, "000000000");
+        setBars (v, 0, 1, chord ? "888000000" : "008000000");
+        v[pd16] = v[pd8] = 0; v[leakUp] = v[leakLo] = v[ageUp] = v[ageLo] = 0; v[clickUp] = v[clickLo] = v[clickPd] = 0;
+        v[vibUpper] = v[vibLower] = 0; v[cabBypass] = 1;
+        return v;
+    };
+    auto notes = [] (bool chord) { std::vector<Event> ev { { sec (0.02), Event::Key, 45, 100, 0 } };
+                                   if (chord) { ev.push_back ({ sec (0.02), Event::Key, 49, 100, 0 }); ev.push_back ({ sec (0.02), Event::Key, 52, 100, 0 }); } return ev; };
+    struct Case { const char* name; bool chord; std::function<void (Values&)> f; };
+    const Case cases[] {
+        { "dry tone, no vibrato, cabinet bypassed", false, [] (Values&) {} },
+        { "tone, C1 upper, cabinet bypassed", false, [] (Values& v) { v[vibUpper] = 1; v[vibMode] = 3; } },
+        { "tone, C3 upper, cabinet bypassed", false, [] (Values& v) { v[vibUpper] = 1; v[vibMode] = 5; } },
+        { "tone, V3 upper, cabinet bypassed", false, [] (Values& v) { v[vibUpper] = 1; v[vibMode] = 2; } },
+        { "tone, Rotor 22 Slow (default mics), no vibrato", false, [] (Values& v) { v[cabBypass] = 0; v[speed] = 1; } },
+        { "tone, Rotor 22 Fast (default mics), no vibrato", false, [] (Values& v) { v[cabBypass] = 0; v[speed] = 2; } },
+        { "tone, Tone Cabinet, no vibrato", false, [] (Values& v) { v[cabBypass] = 0; v[cabModel] = 3; v[rotorConfig] = 3; } },
+        { "chord 888, C3 upper, cabinet bypassed", true, [] (Values& v) { v[vibUpper] = 1; v[vibMode] = 5; } },
+        { "chord 888, Rotor 22 Slow, no vibrato", true, [] (Values& v) { v[cabBypass] = 0; v[speed] = 1; } },
+        { "chord 888, Rotor 22 Slow + C3 (as the factory template)", true, [] (Values& v) { v[cabBypass] = 0; v[speed] = 1; v[vibUpper] = 1; v[vibMode] = 5; } },
+        { "chord 888, Rotor 22 Fast, no vibrato", true, [] (Values& v) { v[cabBypass] = 0; v[speed] = 2; } },
+        { "chord 888, Rotor 22 Fast + C3", true, [] (Values& v) { v[cabBypass] = 0; v[speed] = 2; v[vibUpper] = 1; v[vibMode] = 5; } },
+    };
+    for (const auto& c : cases)
+    {
+        auto v = base (c.chord);
+        c.f (v);
+        const auto a = render (v, notes (c.chord), 4.0);
+        const auto e = envelope (a, 1.0, 4.0);
+        std::printf ("%-60s swing %5.1f dB  rate %5.2f Hz\n", c.name, swing (e), rate (e));
+    }
+    return 0;
+}
+
+// --probe-preset "<Category/Name>" [id=value ...]: one factory preset, with parameter overrides, through the
+// preset checks' own measurements: loudness (dB, level-matched target -18) and the render check's level,
+// peak, release tail (3 s after the chord) and the idle floor it is compared with. For working on a preset
+// without rebuilding.
+int runProbePreset (int argc, char* argv[])
+{
+    PresetManager pm;
+    const auto* src = findPreset (pm, argv[2]);
+    if (src == nullptr) { std::printf ("no preset '%s'\n", argv[2]); return 1; }
+    PresetData d = *src;
+    for (int i = 3; i < argc; ++i)
+    {
+        const juce::String a (argv[i]);
+        const int idx = paramIndex (a.upToFirstOccurrenceOf ("=", false, false));
+        if (idx < 0) { std::printf ("unknown parameter '%s'\n", argv[i]); return 1; }
+        d.values[(size_t) idx] = a.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+    }
+    const auto v = presetValues (d);
+    std::vector<Event> ev;
+    for (int n : { 60, 64, 67 }) { ev.push_back ({ sec (0.02), Event::On, n, 100.0, 0 }); ev.push_back ({ sec (1.2), Event::Off, n, 0.0, 0 }); }
+    ev.push_back ({ sec (0.02), Event::On, 36, 100.0, 2 });
+    ev.push_back ({ sec (1.2), Event::Off, 36, 0.0, 2 });
+    const auto a = render (v, ev, 4.5);
+    std::printf ("%s: loudness %.2f dB (ampLevel %.1f: %.2f without it); render rms %.3f peak %.3f tail %.1e (%.1f dBFS)\n",
+                 d.name.toRawUTF8(), db (presetLoudness (d)), v[ampLevel], db (presetLoudness (d)) - v[ampLevel],
+                 rms (a, sec (0.3), sec (1.1)), peak (a), rms (a, sec (4.2), sec (4.5)), db (rms (a, sec (4.2), sec (4.5))));
+    return 0;
+}

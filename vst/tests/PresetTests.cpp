@@ -16,6 +16,9 @@ int runLoudness();
 int runBench();
 int runHostCheck (const juce::String& path);
 int runHostCab (const juce::String& path);
+int runHostRotor (const juce::String& path);
+int runModProbe();
+int runProbePreset (int argc, char* argv[]);
 int runOrganTests();
 int runVoiceTests();
 int runCabinetTests();
@@ -53,7 +56,7 @@ static void testFactoryPresets (const PresetManager& pm)
 {
     const auto& f = pm.factory();
     std::printf ("factory presets: %d\n", (int) f.size());
-    CHECK (f.size() == 10);   // phase 1: two starters per category; the 50 arrive in phase 5
+    CHECK (f.size() == 50);   // phase 5: 5 categories x 10
     juce::StringArray cats, names;
     std::map<juce::String, int> perCat;
     for (const auto& p : f)
@@ -74,9 +77,37 @@ static void testFactoryPresets (const PresetManager& pm)
     std::printf ("categories (%d): %s\n", cats.size(), cats.joinIntoString (", ").toRawUTF8());
     const juce::StringArray expected { "Jazz", "Gospel", "Rock", "Blues & Soul", "Ballad, Classic & Theatre" };
     CHECK (cats == expected);
-    for (const auto& c : expected) CHECK (perCat[c] == 2);
+    for (const auto& c : expected) CHECK (perCat[c] == 10);
     // template resolved: Trio Classic = upper B 888000000
     CHECK (f[0].name == "Trio Classic" && f[0].values[upB1] == 8.0f && f[0].values[upB1 + 3] == 0.0f);
+
+    // the plan's rules for the 50: every cabinet in >= 6 presets, >= 3 Variable-speed, >= 2 with an outboard
+    // pedal; a preset's cabinet is loaded whole (the model's own rotors, speeds, ramps and baffle, as picking it
+    // in the UI does), so the cabinet templates in the file must match dsp/Cabinets.h; no trademark in a name
+    auto val = [] (const PresetData& p, int i) { const float v = p.values[(size_t) i]; return std::isnan (v) ? paramDefs()[(size_t) i].def : v; };
+    int perCab[4] {}, variable = 0, outboard = 0;
+    for (const auto& p : f)
+    {
+        CHECK (! p.name.containsIgnoreCase ("hammond") && ! p.name.containsIgnoreCase ("leslie"));
+        const int model = juce::jlimit (0, 3, (int) val (p, cabModel));
+        const auto& M = cabinetModel (model);
+        ++perCab[model];
+        CHECK ((int) val (p, rotorConfig) == M.rotorConfig && (int) val (p, drumBaffle) == M.drumBaffle);
+        CHECK (val (p, hornSlow) == (float) M.hornSlow && val (p, hornFast) == (float) M.hornFast
+               && val (p, hornAccel) == (float) M.hornAccel && val (p, hornBrake) == (float) M.hornBrake);
+        CHECK (val (p, drumSlow) == (float) M.drumSlow && val (p, drumFast) == (float) M.drumFast
+               && val (p, drumAccel) == (float) M.drumAccel && val (p, drumBrake) == (float) M.drumBrake);
+        CHECK (val (p, xover) == (float) M.xover && (int) val (p, cabBack) == M.cabBack);
+        if (M.stationary) CHECK ((int) val (p, speed) == 0);
+        if ((int) val (p, speedMode) == 2) ++variable;
+        if (val (p, odOn) >= 0.5f || val (p, wahOn) >= 0.5f || val (p, echoOn) >= 0.5f) ++outboard;
+        // the vibrato is a per-preset choice, never a template's: both switches are stated by every preset
+        CHECK (! std::isnan (p.values[vibUpper]) && ! std::isnan (p.values[vibLower]));
+    }
+    std::printf ("cabinets: Rotor 22 %d, Rotor 45 %d, Single Rotor %d, Tone Cabinet %d; Variable speed %d; outboard %d\n",
+                 perCab[0], perCab[1], perCab[2], perCab[3], variable, outboard);
+    for (int m = 0; m < 4; ++m) CHECK (perCab[m] >= 6);
+    CHECK (variable >= 3 && outboard >= 2);
 }
 
 static void testPresetFiles (const PresetManager& pm)
@@ -163,7 +194,10 @@ static void testPresetFiles (const PresetManager& pm)
     tmp.deleteFile();
 }
 
-// Every factory preset renders: not silent, not into the clipper, silent after release.
+// Every factory preset renders: not silent, not into the clipper, and silent after release. "Silent" means
+// what the organ leaves when no key is down: the leakage floor (always there; a driven amp raises it), so the
+// tail 3 s after the chord is compared with the same preset rendered with no keys at all. Anything else left
+// (a stuck contact, a reverb or echo that doesn't decay, an unstable filter) shows as a tail above that floor.
 static void testPresetRenders (const PresetManager& pm)
 {
     for (const auto& p : pm.factory())
@@ -174,12 +208,17 @@ static void testPresetRenders (const PresetManager& pm)
         ev.push_back ({ sec (0.02), Event::On, 36, 100.0, 2 });
         ev.push_back ({ sec (1.2), Event::Off, 36, 0.0, 2 });
         const auto a = render (v, ev, 4.5);
+        const auto idle = render (v, {}, 4.5);
         const double level = rms (a, sec (0.3), sec (1.1)), pk = peak (a), tail = rms (a, sec (4.2), sec (4.5));
-        // 3 s after release (reverbs gone) only the leakage floor is left (always present, as on the organ): below -80 dBFS
-        const bool ok = level > 0.01 && pk < 0.8 && tail < 1e-4;
+        const double floor = rms (idle, sec (4.2), sec (4.5));
+        // the floor itself stays quiet (below -60 dBFS), and the tail is that floor and nothing else. The amp's
+        // level matching holds its boost after the chord (measured up to +16 dB: Rotor 45 at Drive 0.8 with the
+        // overdrive), which raises the floor by that much: 18 dB of room. A stuck contact, a reverb or an echo
+        // that doesn't decay sits 30 dB or more above the floor.
+        const bool ok = level > 0.01 && pk < 0.8 && floor < 1e-3 && tail < std::max (1e-5, floor * 8.0);
         if (! ok) ++failures;
-        std::printf ("%-4s render %-38s rms %.3f  peak %.3f  tail %.1e\n", ok ? "ok" : "FAIL",
-                     (p.category + "/" + p.name).toRawUTF8(), level, pk, tail);
+        std::printf ("%-4s render %-38s rms %.3f  peak %.3f  tail %.1e (floor %.1e)\n", ok ? "ok" : "FAIL",
+                     (p.category + "/" + p.name).toRawUTF8(), level, pk, tail, floor);
     }
 }
 
@@ -207,8 +246,11 @@ int main (int argc, char* argv[])
     if (cmd == "--render-all" && argc >= 3) return runRenderAll (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]));
     if (cmd == "--loudness") return runLoudness();
     if (cmd == "--bench") return runBench();
+    if (cmd == "--mod-probe") return runModProbe();
+    if (cmd == "--probe-preset" && argc >= 3) return runProbePreset (argc, argv);
     if (cmd == "--host-check" && argc >= 3) return runHostCheck (argv[2]);
     if (cmd == "--host-cab" && argc >= 3) return runHostCab (argv[2]);
+    if (cmd == "--host-rotor" && argc >= 3) return runHostRotor (argv[2]);
     if (cmd == "--organ") return runOrganTests() == 0 ? 0 : 1;
     if (cmd == "--voice") return runVoiceTests() == 0 ? 0 : 1;
     if (cmd == "--cabinet") return runCabinetTests() == 0 ? 0 : 1;

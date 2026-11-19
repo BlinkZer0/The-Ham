@@ -96,6 +96,17 @@ function runChecks() {
     const rnd = window.__log.slice(n0).filter(([e, p]) => e === 'setParam' && /^upA\d$/.test(p.id));   // A# is down (check 3): set A
     ok('randomize STRING: the active upper set changes, 5 1/3\' = 0, 2 2/3\' in 5..8',
        rnd.some(([, p]) => p.id === 'upA5' && p.value >= 5 && p.value <= 8) && !rnd.some(([, p]) => p.id === 'upA2' && p.value !== 0));
+    // 13b. the rotor speed switch: FAST sends speed 2; in 2-Speed the STOP segment is greyed out (the
+    //      engine runs Slow for it), in Variable the whole switch is (the wheel / pedal / CC sets the speed)
+    const speedBtns = [...document.querySelector('.seg[data-param="speed"]').querySelectorAll('button')];
+    speedBtns[2].click();
+    ok('speed switch FAST -> setParam speed 2', sets('speed').at(-1) === 2);
+    ok('2-Speed: STOP greyed out, SLOW and FAST live', speedBtns[0].disabled && !speedBtns[1].disabled && !speedBtns[2].disabled);
+    window.__h.params({ speedMode: 1 });
+    ok('3-Speed: STOP live', !speedBtns[0].disabled);
+    window.__h.params({ speedMode: 2 });
+    ok('Variable: the speed switch is greyed out', speedBtns.every(b => b.disabled));
+    window.__h.params({ speedMode: 0 });
     // 14. organ model badge (C-3 = the churchier case), cabinet model picker
     window.__h.params({ organModel: 1 });
     ok('organ model C-3: badge and case change', document.getElementById('console-badge').textContent.includes('C-3')

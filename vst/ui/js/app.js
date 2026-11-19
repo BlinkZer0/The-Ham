@@ -467,8 +467,20 @@
       model.el.dataset.param = 'cabModel';
       (bound.cabModel = bound.cabModel || []).push(model);
       fields(p, [['Model', model], ['Rotors', control(SelectBox, 'rotorConfig')]]);
-      p.appendChild(control(Segmented, 'speed').el);
+      const speedSeg = control(Segmented, 'speed');
+      p.appendChild(speedSeg.el);
       p.appendChild(control(Segmented, 'speedMode').el);
+      // 2-Speed has no Stop (the engine runs Slow for it) and Variable ignores the switch: grey those out,
+      // so a click that can't change anything doesn't look like a switch that is being ignored
+      refreshers.push((ids) => {
+        if (ids && !ids.has('speedMode')) return;
+        const mode = Math.round(values.speedMode);
+        speedSeg.buttons.forEach((b, i) => {
+          b.disabled = mode === 2 || (mode === 0 && i === 0);
+          b.title = mode === 2 ? 'Variable: the speed follows the mod wheel, the pedal or a CC'
+                  : (mode === 0 && i === 0 ? '2-Speed has no Stop (pick 3-Speed)' : '');
+        });
+      });
       const lamps = el('div', 'speed-lamps', ['STOP', 'SLOW', 'FAST'].map((t, i) => `<span class="speed-lamp" data-s="${i}"><span class="led"></span>${t}</span>`).join('')
         + '<span class="rpm" id="rpm-readout">—</span>');
       lamps.title = 'The speed the rotors are heading for (from the switch, the mod wheel, a CC or the sustain pedal)';

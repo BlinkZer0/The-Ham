@@ -1,7 +1,77 @@
 # The Ham: build plan
 
-Status (2026-11-18): plan approved. **Phases 1–4 done** (tonewheel core, organ voice, rotary cabinets, animated UI);
-waiting for hand-testing before phase 5.
+Status (2026-11-18): plan approved. **Phases 1–5 done** (tonewheel core, organ voice, rotary cabinets, animated UI,
+the 50 presets and verification); waiting for hand-testing before phase 6.
+
+Fix after phase 4, second round (hand-testing: "the rotary speaker seems always active and is audibly ignorant of
+parameter changes"):
+- **The rotor was working.** A new check drives the *built* VST3 through the host API with a note held and measures
+  the level modulation the mics see (`--host-rotor`): Fast swings 11.5 dB at 6.70 Hz (Horn Fast 6.7), Slow 11.6 dB at
+  0.80 Hz, 3-speed Stop 0.27 dB, Horn Fast set to 10 Hz → 10.00 Hz, Bypass 0.18 dB, Tone Cabinet 0.23 dB. The engine,
+  the parameter path (UI → `setParam` → `setValueNotifyingHost` → `readParams()` every block) and the plugin all agree.
+- **What was heard was the scanner chorus.** The factory `organ` template switched **C3 on both manuals** into every
+  preset. Measured on a single 880 Hz tone with the cabinet bypassed (`--mod-probe`): C3 swings the level **21.0 dB at
+  13.7 Hz** (twice the 6.87 Hz scanner rate: the scanned and the straight signal cancel twice per turn), C1 7.1 dB at
+  6.9 Hz, V3 0.3 dB (pure vibrato). The rotor on the same tone: Rotor 22 Slow 14.2 dB at 0.72 Hz, Fast 18.7 dB at
+  6.70 Hz. On an 888 chord: C3 alone 10.7 dB at 6.86 Hz, Rotor 22 Slow 6.6 dB, Slow + C3 10.0 dB, Fast 6.5 dB at
+  6.70 Hz, Fast + C3 9.9 dB (the two rates beat). So with C3 on, a 7 Hz "rotary" is always there, and no CABINET
+  control touches it; switching Slow ↔ Fast adds a second modulation at nearly the same rate, which is hard to hear as
+  a change. That matches the phase-4 report too ("the cabs are not changing the sound").
+- Fixes: the template leaves the vibrato **off** and every preset states it (C3 on the jazz presets where it belongs,
+  C1 / C2 / V-modes elsewhere, off on the shout and rock presets); in **2-Speed** mode the STOP segment is greyed out
+  (the engine runs Slow for it, as before, but a click that can't change anything no longer looks ignored), and in
+  **Variable** mode the whole switch is (the wheel / pedal / CC sets the speed); a troubleshooting entry in
+  `vst/README.md`. Not changed: the chorus depth. Whether 21 dB on a single note is right for C3 is a by-ear question
+  (the plan lists the scanner depths as estimates); `Scanner::kSectionHz`, the 6/12/18 table and the 50:50 chorus mix
+  are the knobs.
+- Also: the installed plugin (07:00) predates the last `dsp/Cabinets.h` voicing; run `vst\install.bat` after building.
+
+Phase 5 notes:
+- **50 presets** (5 categories × 10) in `presets/factory_presets.json`, from **templates**: `organ` (set B, pedals
+  5/3, vibrato off, Drive 20%) and one per cabinet (`cab22`, `cab45`, `cabSingle`, `cabTone`) carrying that model's
+  defaults from `dsp/Cabinets.h`; the preset test fails if they drift apart. The brief's registrations are not in the
+  repo, so the registrations are the commonly published classic settings for each style (88 8000 000 jazz,
+  88 8800 000 soul, 88 8888 888 full organ, 68 8600 000 baroque rock, 80 0008 000 hollow, 00 8000 000 flute, the
+  reed / string / diapason shapes from the randomizer's families …), listed in the README to tune by ear.
+  Rules met and tested: Rotor 22 in 27 presets, Rotor 45 in 9 (funk / comp / grind), Single Rotor in 6 (psychedelic /
+  garage / blues), Tone Cabinet in 8 (hymn / classic / theatre); 3 Variable-speed (mod wheel); 4 outboard (overdrive,
+  echo, wah); no trademark in a name. Level-matched: **−18.05 .. −17.95 dB**.
+- **Release-tail check changed.** It demanded under −80 dBFS 3 s after the chord, but the tube amp's level matching
+  holds its boost after a driven chord (measured up to +16 dB: Rotor 45 at Drive 0.8 with the overdrive), which lifts
+  the ever-present leakage floor by that much. The tail is now compared with the same preset rendered with no keys
+  (the idle floor, itself required below −60 dBFS): within 18 dB of it. A stuck contact or a reverb / echo that doesn't
+  decay sits 30 dB or more above the floor, so the check still catches those. (Leak 0 removes the floor entirely.)
+- **Wah Lead** needed its registration: the wah is a Q-4 band-pass with no dry path, and on 88 8800 000 with the pedal at
+  toe (2.3 kHz) the level-match chord lost 12 dB (−29.9 dB, beyond the +6 dB `ampLevel` can add). With 88 8888 888
+  (harmonics in the wah's band) it sits at −13.2 dB before matching.
+- Tools: `--host-rotor` (above), `--mod-probe`, `--probe-preset "<Category/Name>" [id=value …]` (one preset with
+  overrides through the preset checks' measurements, for working on a preset without a rebuild), and
+  `tests\screenshots.ps1` (the five pages from the real UI with a stand-in bridge → `docs/screenshots/`).
+- Verification, all passing: the preset suite (50 presets: ranges, whole-step drawbars, categories, templates vs
+  `Cabinets.h`, the rules above, file round trips, every preset renders and is silent after release, loudness),
+  `--organ` (33 ok lines, including the glissandos), `--voice` (26), `--cabinet` (31, including the aliasing at C6),
+  `--host-check` (50 programs), `--host-rotor` (6), `--host-cab`, `check-params.ps1` (143), the UI tests (28: the
+  speed switch's greyed segments added), `--bench`: **4.9%** of one core, one key 3.3%.
+
+What to listen for in Minihost Modular (phase 5):
+- Run `vst\install.bat` first (the installed plugin is older than the last cabinet voicing).
+- **Chorus vs rotor.** Load *Jazz / Trio Classic* (C3 upper, Rotor 22 Slow): switch VIB SWELL off on the VOICE page
+  and the 7 Hz shimmer goes; switch the CABINET page Slow ↔ Fast and the horn's swirl changes from a 0.8 Hz throb to a
+  6.7 Hz tremolo, with the drum following over 4 s. If C3 sounds more like a tremolo than a chorus to you, say so:
+  that depth is an estimate.
+- **The presets**, a category at a time. Jazz: Slow cabinets, C1–C3 chorus, soft percussion; *Walking Trio* plays
+  the pedals from the lowest lower-manual key; *Wheel Swell* sweeps the speed from the mod wheel. Gospel: *Full Organ*
+  and the shouts at Fast, *Hymn Swell* and *Chapel Flute* on the Tone Cabinet. Rock: Rotor 45 breaks up sooner
+  (*Overdrive Stack*, *Grind Comp*), the Single Rotor presets (*Garage Fuzz*, *Psychedelic Swirl* with the tape echo),
+  *Wah Lead* on the expression pedal. Blues & Soul: *Funk Comp* and *Greasy Shuffle* on Rotor 45, *Slow Blues* and
+  *Juke Joint* on the Single Rotor, *Swamp Stomp* from the mod wheel. Ballad, Classic & Theatre: Tone Cabinet with the
+  spring reverb (*Bach Plenum*, *Cathedral Swell*), V3 on both manuals for the theatre presets, the reed and string
+  shapes. The registrations are starting points.
+- **2-Speed vs 3-Speed:** in 2-Speed the STOP segment is greyed out; pick 3-Speed to stop the rotors (and STOP AT
+  ANGLE to park the horn). In Variable the switch is greyed out and the mod wheel sets the speed.
+- **The idle floor after a driven chord** (*Grind Comp*, *Overdrive Stack*): with nothing held, a faint high whine
+  (the leakage floor through the cranked amp, about −70 dBFS). Lower Leakage on the VOICE page removes it if it
+  bothers you.
 
 Fix after phase 4 (hand-testing: "the cabs are not changing the sound"):
 - The plugin did switch cabinets (checked through the built VST3 with `--host-cab`), but the four models only differed
@@ -487,7 +557,8 @@ vst/
 5. **Presets + verification → VST v1.0 candidate.** The 50 presets (registrations from the brief as starting
    points; every cabinet in ≥ 6 presets; Single Rotor for psychedelic / garage / some blues, Rotor 45 for funk / comp /
    grind, Tone Cabinet for classic / theatre / hymn; ≥ 3 Variable-speed and ≥ 2 outboard presets), level-matched to
-   ±1 dB; final registrations recorded in the README.
+   ±1 dB; final registrations recorded in the README. (Done: see the phase 5 notes; the brief's registrations were
+   not available, so published classic settings stand in.)
    Tests: everything above for every preset, aliasing of the drive at C6 (inharmonic energy below 18 kHz, as in
    Brass Knuckles), fast chromatic and white-key glissando scenarios (no stuck contacts, no clicks beyond the key
    clicks), `--bench` (61 + 61 + 25 keys, Fast, 4×), `--host-check`. README with screenshots.

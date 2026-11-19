@@ -170,3 +170,141 @@ int runHostCab (const juce::String& path)
     }
     return 0;
 }
+
+// --host-rotor <path>: the built plugin, one instance, its rotor parameters changed while a note is
+// held (as a player does): Fast / Slow / Stop / a different Horn Fast / Bypass / the Tone Cabinet.
+// Measures the amplitude modulation the mics see (swing in dB, and its rate from the envelope).
+int runHostRotor (const juce::String& path)
+{
+    int fails = 0;
+    auto check = [&fails] (bool ok, const juce::String& what) { if (! ok) ++fails; std::printf ("%-4s %s\n", ok ? "ok" : "FAIL", what.toRawUTF8()); };
+
+    juce::VST3PluginFormat format;
+    juce::OwnedArray<juce::PluginDescription> types;
+    format.findAllTypesForFile (types, path);
+    if (types.isEmpty()) { std::printf ("FAIL no plugin at %s\n", path.toRawUTF8()); return 1; }
+    juce::String error;
+    auto plugin = format.createInstanceFromDescription (*types[0], 48000.0, 512, error);
+    if (plugin == nullptr) { std::printf ("FAIL %s\n", error.toRawUTF8()); return 1; }
+
+    // set a plugin parameter (by index or id), in real units, through the host API (normalised)
+    auto setIndex = [&] (int index, float value)
+    {
+        const auto& d = ham::paramDefs()[(size_t) index];
+        float n = 0.0f;
+        if (d.kind == ham::Kind::Float && d.logSkew) n = ham::logRange (d.min, d.max).convertTo0to1 (value);
+        else n = (value - d.min) / std::max (1e-9f, d.max - d.min);
+        for (auto* p : plugin->getParameters())
+            if (p->getName (128) == d.hostName) { p->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, n)); return; }
+        std::printf ("FAIL host parameter '%s' not found\n", d.hostName.toRawUTF8());
+        ++fails;
+    };
+    auto set = [&] (const char* id, float value)
+    {
+        const auto& defs = ham::paramDefs();
+        for (size_t i = 0; i < defs.size(); ++i)
+            if (defs[i].id == id) { setIndex ((int) i, value); return; }
+        std::printf ("FAIL unknown id %s\n", id); ++fails;
+    };
+    // one clean tone: upper set B, 8' only, no click / percussion / vibrato / leakage / age
+    for (int m = 0; m < 2; ++m) for (int st = 0; st < 2; ++st) for (int f = 0; f < ham::kNumFootages; ++f) setIndex (ham::drawbarParam (m, st, f), 0);
+    setIndex (ham::drawbarParam (0, 1, 2), 8);
+    set ("upKey", 11); set ("pd16", 0); set ("pd8", 0);
+    set ("percOn", 0); set ("vibUpper", 0); set ("vibLower", 0);
+    set ("leakUp", 0); set ("leakLo", 0); set ("ageUp", 0); set ("ageLo", 0);
+    set ("clickUp", 0); set ("clickLo", 0); set ("clickPd", 0);
+    set ("odOn", 0); set ("wahOn", 0); set ("echoOn", 0); set ("revOn", 0); set ("drive", 0);
+
+    plugin->setPlayConfigDetails (0, 2, 48000.0, 512);
+    plugin->prepareToPlay (48000.0, 512);
+    juce::AudioBuffer<float> buf (2, 512);
+    std::vector<float> out;
+    auto run = [&] (double seconds, int noteOn)
+    {
+        const int blocks = (int) (seconds * 48000.0 / 512.0);
+        for (int b = 0; b < blocks; ++b)
+        {
+            juce::MidiBuffer midi;
+            if (b == 0 && noteOn > 0) midi.addEvent (juce::MidiMessage::noteOn (1, noteOn, (juce::uint8) 100), 0);
+            buf.clear();
+            plugin->processBlock (buf, midi);
+            for (int i = 0; i < 512; ++i) out.push_back (0.5f * (buf.getSample (0, i) + buf.getSample (1, i)));
+        }
+    };
+    // envelope: RMS in 5 ms windows every 2 ms over the last `seconds` of `out`
+    auto envelope = [&] (double seconds)
+    {
+        std::vector<double> e;
+        const int win = 240, hop = 96, n = (int) (seconds * 48000.0);
+        for (int s = std::max (0, (int) out.size() - n); s + win <= (int) out.size(); s += hop)
+        {
+            double acc = 0;
+            for (int i = 0; i < win; ++i) acc += (double) out[(size_t) (s + i)] * out[(size_t) (s + i)];
+            e.push_back (std::sqrt (acc / win));
+        }
+        return e;
+    };
+    auto swingDb = [] (const std::vector<double>& e)
+    {
+        double lo = 1e9, hi = 0;
+        for (double x : e) { lo = std::min (lo, x); hi = std::max (hi, x); }
+        return 20.0 * std::log10 (std::max (hi, 1e-12) / std::max (lo, 1e-12));
+    };
+    auto rateHz = [] (const std::vector<double>& e)   // strongest component of the envelope, 0.3..15 Hz
+    {
+        const double fs = 48000.0 / 96.0;
+        double mean = 0; for (double x : e) mean += x; mean /= (double) std::max<size_t> (1, e.size());
+        double best = 0, bestP = -1;
+        for (double f = 0.3; f <= 15.0; f += 0.02)
+        {
+            double re = 0, im = 0;
+            for (size_t i = 0; i < e.size(); ++i) { const double w = 2.0 * juce::MathConstants<double>::pi * f * (double) i / fs; re += (e[i] - mean) * std::cos (w); im -= (e[i] - mean) * std::sin (w); }
+            const double p = re * re + im * im;
+            if (p > bestP) { bestP = p; best = f; }
+        }
+        return best;
+    };
+
+    // Rotor 22, horn only through one close mono mic so the horn's own modulation is what's measured
+    set ("cabModel", 0); set ("cabBypass", 0); set ("rotorConfig", 1); set ("micLayout", 0); set ("micDist", 0);
+    set ("xover", 300); set ("speedMode", 1); set ("speed", 2); set ("hornFast", 6.7f); set ("hornSlow", 0.8f);
+    set ("speedWheel", 0);
+    run (3.0, 81);   // A5 on the upper manual, held from here on
+    auto e = envelope (2.0);
+    std::printf ("     Fast:            swing %.1f dB, rate %.2f Hz (Horn Fast 6.7)\n", swingDb (e), rateHz (e));
+    check (swingDb (e) > 3.0 && std::abs (rateHz (e) - 6.7) < 0.5, "plugin: Fast modulates at the Horn Fast rate");
+
+    set ("speed", 1);
+    run (6.0, 0);
+    e = envelope (4.0);
+    std::printf ("     Slow:            swing %.1f dB, rate %.2f Hz (Horn Slow 0.8)\n", swingDb (e), rateHz (e));
+    check (swingDb (e) > 3.0 && std::abs (rateHz (e) - 0.8) < 0.2, "plugin: Slow modulates at the Horn Slow rate");
+
+    set ("speed", 0);
+    run (6.0, 0);
+    e = envelope (1.5);
+    std::printf ("     Stop (3-speed):  swing %.2f dB\n", swingDb (e));
+    check (swingDb (e) < 0.3, "plugin: Stop stops the modulation");
+
+    set ("hornFast", 10.0f); set ("speed", 2);
+    run (4.0, 0);
+    e = envelope (2.0);
+    std::printf ("     Horn Fast 10 Hz: swing %.1f dB, rate %.2f Hz\n", swingDb (e), rateHz (e));
+    check (swingDb (e) > 3.0 && std::abs (rateHz (e) - 10.0) < 0.5, "plugin: Horn Fast changes the rate");
+
+    set ("cabBypass", 1);
+    run (3.0, 0);
+    e = envelope (1.5);
+    std::printf ("     Bypass:          swing %.2f dB\n", swingDb (e));
+    check (swingDb (e) < 0.3, "plugin: Bypass removes the modulation");
+
+    set ("cabBypass", 0); set ("cabModel", 3);
+    run (3.0, 0);
+    e = envelope (1.5);
+    std::printf ("     Tone Cabinet:    swing %.2f dB\n", swingDb (e));
+    check (swingDb (e) < 0.3, "plugin: the Tone Cabinet has no rotors");
+
+    plugin->releaseResources();
+    std::printf (fails == 0 ? "HOST ROTOR CHECK PASSED\n" : "HOST ROTOR CHECK: %d FAILURE(S)\n", fails);
+    return fails == 0 ? 0 : 1;
+}

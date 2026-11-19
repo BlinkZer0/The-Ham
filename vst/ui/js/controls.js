@@ -55,6 +55,7 @@ class Segmented {
   }
   pick(i) {
     i = clamp(Math.round(i), 0, this.buttons.length - 1);
+    if (this.buttons[i].disabled) return;
     if (i !== this.value) this.onChange(i);
   }
   setValue(v) {

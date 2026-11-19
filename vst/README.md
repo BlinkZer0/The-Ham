@@ -80,8 +80,13 @@ There is no voice allocation: the cost is the 91 wheels plus one dot product per
 
 ## Presets
 
-- **Factory**: [presets/factory_presets.json](presets/factory_presets.json) uses **templates** (`organ` → `tone`)
-  plus per-preset overrides. `ampLevel` comes from `tests\level-match.ps1`.
+- **Factory**: [presets/factory_presets.json](presets/factory_presets.json): 50 presets (5 categories × 10) built from
+  **templates** plus per-preset overrides. `organ` holds the manual defaults (set B, pedals 5/3, vibrato off, Drive 20%);
+  `cab22`, `cab45`, `cabSingle` and `cabTone` each carry one cabinet model's defaults from `dsp/Cabinets.h` (rotors,
+  speeds, ramps, baffle, crossover, back, mics, Slow / Fast / Stop), and the tests fail if the two drift apart, so a
+  preset loads the whole cabinet, as picking the model in the UI does. The vibrato is never a template's: every preset
+  states both switches. `ampLevel` comes from `tests\level-match.ps1`; `TheHamTests --probe-preset` measures one
+  preset with overrides while you work on it.
 - **User folder**: `Documents\The Ham\Presets`, subfolders = categories, rescanned every ~2 s. SAVE asks before
   replacing a file. The × on a user preset moves it to the Recycle Bin.
 - **File format** (`.hampreset`, plain JSON). Missing parameters load at their defaults, values are clamped, master is
@@ -103,6 +108,10 @@ There is no voice allocation: the cost is the 91 wheels plus one dot product per
 | `TheHamTests.exe --cabinet` | 33 cabinet checks: rotors start at speed; Slow→Fast within 2% after exactly Accel (1.001 s / 4.000 s), Fast→Slow after Brake (1.501 / 5.000 s), horn leads, drum lags; steady speeds; 3-speed Stop and brake to 90.0°; 2-speed Stop = Slow; overrides, Drum Off, Stationary, directions; half moon, momentary, sustain, Speed CC, 3-speed CC, Variable; Doppler (±41 cents Fast, ±5 Slow), AM (10.6 dB Fast, 0.01 dB stationary), stereo (horn L/R correlation 0.39), mono / Width 0 / Bypass identical channels; no click on Slow↔Fast; mono compatibility of 4 cabinets × 5 layouts (worst band −6.2 dB); amp aliasing at C6 (1× −53, 2× −77, 4× −78 dB) and measured vs reported latency; overdrive, wah, tape echo, spring reverb; organ models |
 | `TheHamTests.exe --cab-compare [folder]` | the same chord through each cabinet: level, centroid, L/R correlation, band profile; with a folder, writes it as WAVs (Slow, then Fast) to audition |
 | `TheHamTests.exe --host-cab "<path>\The Ham.vst3"` | the built plugin with its Cabinet parameter at each model: how different the output is |
+| `TheHamTests.exe --host-rotor "<path>\The Ham.vst3"` | the built plugin, one instance, its rotor parameters changed through the host API while a note is held: Fast and Slow modulate at the Horn Fast / Slow rates, Stop stops, a changed Horn Fast changes the rate, Bypass and the Tone Cabinet have no modulation (6 checks) |
+| `TheHamTests.exe --mod-probe` | what modulates the sound and how much: the envelope swing (dB) and rate (Hz) of a held tone and of a chord under the chorus (C1 / C3 / V3), each rotor speed and the Tone Cabinet |
+| `TheHamTests.exe --probe-preset "<Category/Name>" [id=value …]` | one factory preset with overrides, through the preset checks' own measurements: loudness, render level, peak, release tail and the idle floor |
+| `tests\screenshots.ps1` | the five UI pages captured in headless Edge with a stand-in bridge (a preset, lit keys, spinning rotors) → `docs/screenshots/*.png` |
 | `TheHamTests.exe --host-check "<path>\The Ham.vst3"` | loads the built VST3 like a DAW: scans as an instrument, all parameters named, notes + a drawbar CC make sound while parameters are automated, state restores exactly, programs switch |
 | `TheHamTests.exe --bench` | all 61 + 61 + 25 keys held, every drawbar out, percussion, scanner on both manuals, leakage and Age 100%, Fast rotors, 4× amp, dual horns, 3 mics + room, overdrive + wah + echo + reverb: 4.6% of one core; one key: 3.2% |
 | `TheHamTests.exe --loudness` | loudness of every factory preset (JSON) |
@@ -172,3 +181,9 @@ with its speed; a disagreeing report becomes an offset that fades out over ~80 m
 - **Blank window:** the WebView2 runtime is missing or blocked. Its data folder is `%TEMP%\TheHamVST-WebView2`;
   deleting it is safe.
 - **A manual is silent:** check its preset key (C = cancel silences it) and the MIDI channels on the PLAY · MIDI page.
+- **The rotary seems to run all the time and the CABINET page doesn't change it:** look at the VOICE page first. The
+  scanner chorus (VIB SWELL / VIB GREAT, C1–C3) turns at 6.9 Hz, which sounds much like a fast horn, and it is not
+  touched by any cabinet control. The CABINET page shows what the rotors are doing: the STOP / SLOW / FAST lamps and the
+  horn and drum rpm. In 2-Speed mode STOP is greyed out (that switch has no Stop: pick 3-Speed); in Variable mode the
+  whole switch is, because the mod wheel, pedal or CC sets the speed. `TheHamTests --host-rotor` measures the rotor
+  through the built plugin; `--mod-probe` shows the chorus and the rotors side by side.

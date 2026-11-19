@@ -1,4 +1,4 @@
-# The Ham: v0.4 (phase 4 of 6)
+# The Ham: v0.5 (phase 5 of 6)
 
 The Ham is a tonewheel organ modeled on the B-3, to be played through rotary cabinets modeled on the 122 and its
 relatives. It is a model of the real instrument's architecture, not an oscillator-per-note synth: 91 tonewheels run all the
@@ -8,11 +8,20 @@ instrument in the family after [E-Piano](https://github.com/BlinkZer0/E-PianoVST
 
 | Build | Where | Status |
 |---|---|---|
-| **VST3 plugin** + Standalone | [`vst/`](vst/README.md) | phases 1–4: tonewheel generator, drawbars, key click, percussion, scanner vibrato/chorus, expression, leakage, Age, four rotary cabinets, tube amp, outboard pedals, spring reverb, animated cabinet and the full UI; all automated checks pass |
+| **VST3 plugin** + Standalone | [`vst/`](vst/README.md) | phases 1–5: tonewheel generator, drawbars, key click, percussion, scanner vibrato/chorus, expression, leakage, Age, four rotary cabinets, tube amp, outboard pedals, spring reverb, animated cabinet, the full UI and 50 level-matched presets; all automated checks pass |
 | **Web build** | `web/index.html` (also served at https://blinkzer0.github.io/The-Ham/) | phase 6 |
 
 The plan, the phases and the measured results are in [docs/PLAN.md](docs/PLAN.md). The house rules are in
 [docs/CONVENTIONS.md](docs/CONVENTIONS.md).
+
+## Screenshots
+
+| DRAWBARS | CABINET |
+|---|---|
+| ![Drawbars page](docs/screenshots/drawbars.png) | ![Cabinet page, Rotor 22 at Fast](docs/screenshots/cabinet.png) |
+
+The [VOICE](docs/screenshots/voice.png), [PLAY · MIDI](docs/screenshots/play.png) and [FX](docs/screenshots/fx.png)
+pages are in `docs/screenshots/` (made by `vst\tests\screenshots.ps1` from the real UI with a stand-in bridge).
 
 ## What it does so far (phase 1)
 
@@ -109,8 +118,7 @@ built-in spring reverb).
   Learned CCs are saved with the project and stay when you change presets.
 
 ### Coming next
-The 50 presets (phase 5) and the web build (phase 6). 50 presets (phase 5). The web build (phase 6). Their parameters
-already exist and are saved with presets, so projects made now keep loading.
+The web build (phase 6): the same engine in the browser, with parity tests against the plugin.
 
 ## Build and install
 
@@ -127,15 +135,101 @@ presets are host programs. Right-click any control for the host's parameter menu
 
 ## Presets
 
-10 starter presets (two per category: Jazz, Gospel, Rock, Blues & Soul, Ballad/Classic/Theatre), level-matched to within
-0.05 dB. The 50 come in phase 5. User presets are `.hampreset` files (plain JSON, versioned) in
+50 factory presets, 10 per category, level-matched to within 0.05 dB of −18 dB. Every preset loads its cabinet whole (the
+model's rotors, speeds, ramps and mics, as picking it in the UI does); every cabinet appears in at least 6 presets, three
+presets sweep the speed from the mod wheel (Variable), four use the outboard pedals. **The vibrato / chorus is a per-preset
+choice, not a default**: the C3 chorus turns at 6.9 Hz and is easy to mistake for a fast rotor, so it is on only where it
+belongs to the sound (see "Status" below). User presets are `.hampreset` files (plain JSON, versioned) in
 **`Documents\The Ham\Presets`**. Drawbars are saved as whole steps.
+
+Registrations are upper · lower · pedal (16' 5⅓' 8' 4' 2⅔' 2' 1⅗' 1⅓' 1'; pedals 16' 8'), all on drawbar set B. The
+registrations are the commonly published classic settings for each style, as starting points: tell me what sounds off.
+
+**Jazz**
+
+| Preset | Upper | Lower | Pedal | Percussion | Vibrato | Cabinet | Also |
+|---|---|---|---|---|---|---|---|
+| Trio Classic | 88 8000 000 | 83 8000 000 | 53 | 3rd soft fast | C3 upper | Rotor 22 · Slow | – |
+| Ballad Smoke | 83 8000 000 | 00 8000 000 | 43 | – | C1 upper | Rotor 22 · Slow | – |
+| Bebop Comp | 80 8000 000 | 84 8000 000 | 53 | 2nd normal fast | – | Rotor 45 · Slow | – |
+| Blue Bossa | 86 8000 000 | 00 8000 000 | 53 | – | C2 upper | Rotor 22 · Slow | – |
+| Walking Trio | 88 8000 000 | 80 8000 000 | 85 | 3rd soft slow | C3 upper | Rotor 22 · Slow | manual bass |
+| Smoky Flute | 00 8000 000 | 00 8000 000 | 42 | – | C1 upper | Single Rotor · Slow | mics at 60% |
+| Late Set | 88 8800 000 | 83 8000 000 | 53 | 2nd soft fast | – | Rotor 22 · Fast | – |
+| Uptown Shout | 88 8888 000 | 84 8000 000 | 63 | 3rd normal fast | – | Rotor 45 · Fast | drive 30% |
+| Cool Hollow | 80 0008 000 | 00 8000 000 | 43 | – | C3 both | Rotor 22 · Slow | – |
+| Wheel Swell | 88 8000 000 | 83 8000 000 | 53 | 3rd soft fast | C3 upper | Rotor 22 · Variable (mod wheel) | – |
+
+**Gospel**
+
+| Preset | Upper | Lower | Pedal | Percussion | Vibrato | Cabinet | Also |
+|---|---|---|---|---|---|---|---|
+| Full Organ | 88 8888 888 | 88 8800 000 | 85 | – | – | Rotor 22 · Fast | – |
+| Hymn Swell | 88 6000 000 | 00 8800 000 | 64 | – | – | Tone Cabinet | – |
+| Praise Shout | 88 8888 888 | 88 8000 000 | 85 | 3rd normal fast | – | Rotor 45 · Fast | drive 35% |
+| Sunday Morning | 88 8800 000 | 83 8000 000 | 64 | – | C3 upper | Rotor 22 · Slow | – |
+| Choir Pad | 68 8600 000 | 00 8800 000 | 53 | – | C2 both | Rotor 22 · Slow | – |
+| Testimony | 88 8866 000 | 84 8000 000 | 74 | 2nd normal slow | – | Rotor 22 · Fast | – |
+| Altar Call | 86 6800 000 | 83 8000 000 | 53 | – | C1 upper | Rotor 22 · Slow | drive 30% |
+| Shout Chorus | 88 8888 888 | 88 8800 000 | 85 | 3rd soft fast | – | Rotor 45 · Fast | drive 50% |
+| Chapel Flute | 00 8000 000 | 00 8000 000 | 42 | – | V1 upper | Tone Cabinet | reverb 10% |
+| Revival Swell | 88 8888 888 | 88 8000 000 | 85 | – | – | Rotor 22 · Variable (mod wheel) | – |
+
+**Rock**
+
+| Preset | Upper | Lower | Pedal | Percussion | Vibrato | Cabinet | Also |
+|---|---|---|---|---|---|---|---|
+| Overdrive Stack | 88 8000 000 | 84 8000 000 | 63 | – | – | Rotor 45 · Fast | drive 70% |
+| Rock Pad | 88 8800 000 | 00 8800 000 | 53 | – | C3 upper | Rotor 22 · Slow | – |
+| Baroque Rock | 68 8600 000 | 00 8800 000 | 53 | – | C3 both | Rotor 22 · Slow | drive 25% |
+| Grind Comp | 88 8888 888 | 88 8000 000 | 85 | – | – | Rotor 45 · Fast | drive 80%, overdrive 50% |
+| Garage Fuzz | 88 6000 000 | 84 8000 000 | 63 | 3rd normal fast | – | Single Rotor · Slow | drive 60%, overdrive 70% |
+| Psychedelic Swirl | 88 8000 008 | 80 8000 000 | 53 | – | C3 both | Single Rotor · Fast | tape echo 0.35 s |
+| Prog Lead | 80 0000 008 | 00 8000 000 | 43 | 3rd normal fast | – | Rotor 22 · Fast | drive 50% |
+| Arena Chords | 88 8888 888 | 88 8800 000 | 85 | – | – | Rotor 22 · Fast | drive 40%, wide stereo mics |
+| Dirty Shuffle | 88 8000 000 | 83 8000 000 | 63 | 2nd soft fast | – | Rotor 45 · Slow | drive 60%, amp 4× |
+| Wah Lead | 88 8888 888 | 00 8000 000 | 43 | – | – | Rotor 22 · Fast | drive 30%, wah on the expression pedal |
+
+**Blues & Soul**
+
+| Preset | Upper | Lower | Pedal | Percussion | Vibrato | Cabinet | Also |
+|---|---|---|---|---|---|---|---|
+| Memphis Soul | 88 8800 000 | 83 8000 000 | 53 | 2nd soft fast | – | Rotor 22 · Slow | drive 30% |
+| Motown Pad | 80 8808 008 | 00 8800 000 | 53 | – | C3 upper | Rotor 22 · Slow | – |
+| Slow Blues | 83 8000 000 | 00 8000 000 | 53 | 3rd soft slow | C1 upper | Single Rotor · Slow | – |
+| Juke Joint | 88 8000 000 | 84 8000 000 | 64 | 3rd normal fast | – | Single Rotor · Slow | drive 50% |
+| Funk Comp | 80 8000 008 | 00 8800 000 | 53 | 2nd normal fast | – | Rotor 45 · Fast | – |
+| Soul Ballad | 86 8600 000 | 00 8000 000 | 43 | – | C2 upper | Rotor 22 · Slow | reverb 15% |
+| Gospel Blues | 88 8866 000 | 83 8000 000 | 64 | – | C3 upper | Rotor 22 · Fast | – |
+| Greasy Shuffle | 88 8000 008 | 84 8000 000 | 64 | 3rd soft fast | – | Rotor 45 · Slow | drive 40% |
+| Soul Shout | 88 8888 000 | 88 8000 000 | 74 | – | – | Rotor 22 · Fast | drive 30% |
+| Swamp Stomp | 88 8000 000 | 83 8000 000 | 63 | 3rd normal fast | – | Single Rotor · Variable (mod wheel) | drive 50% |
+
+**Ballad, Classic & Theatre**
+
+| Preset | Upper | Lower | Pedal | Percussion | Vibrato | Cabinet | Also |
+|---|---|---|---|---|---|---|---|
+| Flute 8' | 00 8000 000 | 00 8000 000 | 42 | – | – | Tone Cabinet | – |
+| Bach Plenum | 86 8868 000 | 86 8000 000 | 64 | – | – | Tone Cabinet | reverb 15% · 3 s |
+| Theatre Tibia | 80 8000 000 | 00 8000 000 | 53 | – | V3 both | Tone Cabinet | reverb 10% |
+| Silent Film | 88 8888 888 | 88 8000 000 | 64 | – | V3 both | Tone Cabinet | – |
+| Cathedral Swell | 68 6000 000 | 00 8000 000 | 53 | – | – | Tone Cabinet | reverb 25% · 3 s |
+| String Ensemble | 20 6788 776 | 00 6000 000 | 43 | – | C1 both | Rotor 22 · Slow | – |
+| Reed Oboe | 00 7785 640 | 00 8000 000 | 43 | – | V2 upper | Tone Cabinet | – |
+| Clarinet Solo | 00 6806 000 | 00 8000 000 | 43 | – | V2 upper | Rotor 22 · Slow | – |
+| Ballad Pad | 83 8000 000 | 00 8800 000 | 53 | – | C3 both | Rotor 22 · Slow | reverb 20% |
+| Theatre Pipes | 88 8888 888 | 88 8800 000 | 85 | – | C3 both | Rotor 22 · Slow | reverb 25%, wide stereo mics |
 
 ## Status and known limitations
 
-- **Still to confirm by hand** in Minihost Modular: everything in phases 1 and 2 (see "What to listen for" in
-  [docs/PLAN.md](docs/PLAN.md)). The scanner depths, the percussion decay times and the cabinet voicings in
-  particular need judging by ear.
+- **Still to confirm by hand** in Minihost Modular: everything in phases 1–5 (see "What to listen for" in
+  [docs/PLAN.md](docs/PLAN.md)). The scanner depths, the percussion decay times, the cabinet voicings and the 50
+  registrations in particular need judging by ear.
+- **"The rotary seems to run all the time"**: that is most likely the **scanner chorus** (VOICE page, VIB SWELL /
+  VIB GREAT and V1–C3), not the cabinet. C3 turns at 6.9 Hz and, on a single note, swings the level by about 21 dB,
+  more than the rotor itself; the earlier starter presets had it on everywhere. The rotor itself was checked through
+  the built plugin: Slow, Fast, Stop, Bypass, the Tone Cabinet and a changed Horn Fast rate all measure as set
+  (`TheHamTests --host-rotor`). Whether C3 is too deep is a by-ear question: the scanner depths are estimates.
 - Pedal drawbar mixtures, the per-wheel voicing, the scanner depths, the lower manual's preset chart, the cabinet
   voicings and the M-3's taper are approximations. No published data was found; see the reference table in the plan.
 - Windows only for now. The code is portable JUCE, but no macOS build has been set up.
