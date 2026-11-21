@@ -1,4 +1,4 @@
-# The Ham: v0.5 (phase 5 of 6)
+# The Ham
 
 The Ham is a tonewheel organ modeled on the B-3, to be played through rotary cabinets modeled on the 122 and its
 relatives. It is a model of the real instrument's architecture, not an oscillator-per-note synth: 91 tonewheels run all the
