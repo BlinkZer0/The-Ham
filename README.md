@@ -23,7 +23,7 @@ The plan, the phases and the measured results are in [docs/PLAN.md](docs/PLAN.md
 The [VOICE](docs/screenshots/voice.png), [PLAY · MIDI](docs/screenshots/play.png) and [FX](docs/screenshots/fx.png)
 pages are in `docs/screenshots/` (made by `vst\tests\screenshots.ps1` from the real UI with a stand-in bridge).
 
-## What it does so far (phase 1)
+## What it does so far 
 
 ### The tonewheel generator
 - **91 wheels that never stop.** They are shared by every key and never reset by a key press, so chords are phase-locked
