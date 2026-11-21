@@ -3,7 +3,8 @@
 This folder is the source of truth for The Ham:
 - **C++ DSP**: the plugin's sound engine (`Source/SynthEngine.h`, `Source/dsp/`).
 - **HTML/SVG UI**: shown inside the plugin through WebView2.
-- **Web host** (phase 6): the same UI in a browser with a JS twin of the engine.
+- **Web host**: runs the same UI in a browser with a JS twin of the engine (`webhost/`, built into `../web/index.html`
+  and `../docs/index.html`).
 
 ## Build
 
@@ -118,9 +119,37 @@ There is no voice allocation: the cost is the 91 wheels plus one dot product per
 | `TheHamTests.exe --render "<Category/Name>" out.wav [demo\|chord\|gliss\|click]` | offline render of a preset |
 | `TheHamTests.exe --render-all <folder>` | every preset, demo phrase |
 | `TheHamTests.exe --dump-params` | the C++ parameter table as JSON |
-| `powershell -File tests\run-ui-tests.ps1` | 28 UI checks in headless Edge (served, real time, mocked bridge): drawbars, registration strings, preset keys, keyboards, host params / notes, the registration editor, MIDI learn, expression pedal, rocker tabs, undo / redo, A/B, randomize, organ badge, cabinet picker; the cabinet drawing settles on reported angles, tracks a horn spinning at 6.7 Hz within 0.2° (97 frames in 1.5 s, 0.09 ms of script per frame), draws nothing when idle or off its page |
+| `TheHamTests.exe --parity tests\parity_scenarios.json` | renders the parity scenarios with the C++ engine, prints RMS per window + peak as JSON |
+| `powershell -File tests\run-parity.ps1 [-Tolerance 1e-4] [-Full]` | **C++/JS parity**: 111 scenarios (181 s of audio) rendered by the C++ engine and by `webhost/dsp-worklet.js` in headless Edge; RMS of each channel in 16 windows and the peak must agree within the tolerance. 61 feature scenarios cover every engine path: tuning, mains and transpose, the motor (pitch dive, Run, the Motor Off CC), click and key-up click, velocity modes, drawbar sets, every fixed preset key and cancel, moving and fractional bars, the pedal drawbars and tone, percussion (single trigger, 2nd / 3rd, fast / slow, soft, set A), V1–V3 and C1–C3 on each manual, leakage and Age, pedal and lower sustain, manual bass, expression (CC, on-screen, a custom CC, reset), the M-3, A-100 and C-3, a model change with keys held, Split and the pedal zone, channels and the pedal base, raw MIDI, panic and all notes off, 3-speed and 2-speed switching, brake to angle, Variable from the wheel / pedal / CC, half moon, momentary, the Speed CC and the sustain pedal, rotor overrides and Drum Off, custom speeds and directions, the four cabinets with their options, each rotor layout, every mic layout and the room mic, crossover and balance, Drive at 1× / 2× / 4×, bypass and width, the overdrive, the wah from each source, the tape echo, the spring reverb, patch level and master, a contact storm (chromatic run + glissando) and everything held with everything on; plus one phrase per factory preset. Currently **worst 5.0·10⁻⁶**. Also prints each engine's render speed |
+| `node tests\parity-runner.js` | the JS half of the parity test without Edge (prints JSON; `node tests\parity-compare.js cpp.json js.json` compares) |
+| `node tests\js-bench.js` | the JS engine's CPU use (Node, one core): one key 6.6%, a six-key trio chord 9.5–9.7% on Trio Classic / Full Organ / Grind Comp / Psychedelic Swirl / Bach Plenum, the `--bench` worst case 10.4% |
+| `powershell -File tests\run-ui-tests.ps1 [-Plugin \| -Web]` | 111 UI checks in headless Edge. **Plugin UI** (28; served in real time with a mocked bridge): drawbars, registration strings, preset keys, keyboards, host params / notes, the registration editor, MIDI learn, expression pedal, rocker tabs, undo / redo, A/B, randomize, organ badge, cabinet picker; the cabinet drawing settles on reported angles, tracks a horn spinning at 6.7 Hz within 0.2° (about 100 frames in 1.5 s, 0.1 ms of script per frame), draws nothing when idle or off its page. **Web build** (built first; 38 checks opened from disk, 45 served): start-up without errors, web config, a ScriptProcessor on `file://` and an AudioWorklet served, 50 presets in 5 categories, every preset parameter has a control, the cabinet-defaults table against the factory cabinet templates, a drawbar wheel and a rocker reach the host and the DSP, undo, preset load / step / save / replace / reload / delete in this browser, the `.hampreset` text (format, clamping, migration, an unreadable registration) and a foreign file refused, on-screen and computer keys, the expression pedal, PANIC, raw MIDI routed, B4D drawbar CCs, keyswitches, MIDI learn (learn, the map kept, forget), the page's own engine renders Trio Classic and Bach Plenum and is silent with no keys; served: stats at ~30 Hz from the audio thread, a held key makes sound, the engine lights the keys, rotor events, the drawn horn spinning at the engine's rate (6.69 vs 6.70 Hz), the FAST lamp and the rpm readout |
 | `powershell -File tests\check-params.ps1` | `params.js` matches `Params.h` exactly (order, IDs, ranges, defaults, units, choices) |
 | `powershell -File tests\level-match.ps1` | re-renders every preset and rewrites its `ampLevel` to the loudness target |
+
+## Web build
+
+`webhost/build-web.ps1` writes `../web/index.html` and `../docs/index.html` (byte-identical; GitHub Pages serves the
+latter): `ui/index.html` with the CSS and every script inlined, plus, right before `engine-juce.js`, the factory
+presets (`FACTORY_JSON`), `factory.js`, `dsp-worklet.js` and `web-host.js`. The UI is unchanged: `web-host.js`
+provides `window.__JUCE__.backend` with the plugin editor's events.
+- `dsp-worklet.js`: one self-contained function, the **line-for-line twin** of `SynthEngine.h`, `dsp/*.h`,
+  `EngineParamsFromValues.h` and `MidiRouting.h` (same control rate, RNG, maths and order of operations; parameter
+  values are rounded to float as the plugin's are). It allocates nothing while rendering: the contact-event heap is a
+  struct of typed arrays, the ramps and pickups are preallocated. **Any change to the C++ engine must be made here
+  too**; `run-parity.ps1` catches drift. It runs in an AudioWorklet when the page is served (its own audio thread) and
+  through a ScriptProcessor on `file://`, and reports the stats, the rotor angles and the keys held about 30 times a
+  second.
+- `web-host.js`: Web Audio, Web MIDI (all inputs or one), and the processor's share of the plugin: the drawbar CC
+  maps, MIDI learn (the map is kept in this browser) and the preset keyswitches act on parameters here, everything
+  else goes to the engine through `routeMidi`; the fixed preset-key registrations; a cabinet pick loads the model's
+  defaults (the same 14 parameters as `applyCabinetModel`; the UI tests check the table against the factory cabinet
+  templates); `rotor` and `notes` events from the worklet's reports; presets in this browser (localStorage) or a
+  linked folder (`.hampreset`, the plugin's format, rescanned every 2 s). `window.__hamWebHost` is the test hook.
+- `factory.js`: the factory presets resolved as `PresetManager::loadFactory` does (templates, clamping, the
+  registrations block), the `.hampreset` constants and the migration steps.
+- `dev.html`: the web build unbundled. `serve.ps1 -Dev` (repo root) serves `vst/` and opens it, so edits to `ui/`
+  or `webhost/` need only a reload.
 
 ## Layout
 
@@ -140,7 +169,7 @@ Source/
   dsp/Outboard.h             overdrive, wah, tape echo
   dsp/SpringReverb.h         spring reverb
   EngineParamsFromValues.h   parameter values -> engine snapshot (plugin + tests)
-  MidiRouting.h              MIDI message -> engine (plugin + parity tool)
+  MidiRouting.h              MIDI message -> engine (plugin + parity tool; mirrored in webhost/dsp-worklet.js)
   CcMap.h                    drawbar CC maps, preset-key keyswitches, learnable CCs
   PresetManager.*            factory templates, user folder, .hampreset read/write/migrate
   PluginProcessor.*          APVTS, MIDI, CC maps -> parameters, UI key FIFO, programs, state
@@ -152,10 +181,13 @@ ui/                          HTML/CSS/SVG/JS UI, embedded in the binary
   js/piano.js                manuals, pedalboard, preset keys
   js/knob.js, controls.js    knob, toggle, segmented, dropdown (shared with Brass Knuckles); Rocker, ExpressionPedal
   js/engine-juce.js          the bridge
-  js/app.js                  UI wiring
+  js/app.js                  UI wiring (shared with the web build)
+webhost/                     dsp-worklet.js (the JS engine), factory.js, web-host.js, build-web.ps1, dev.html
 presets/factory_presets.json
-tests/                       PresetTests.cpp, OrganTests.cpp, VoiceTests.cpp, CabinetTests.cpp, EngineTools.cpp, HostCheck.cpp, TestRender.h,
-                             check-params.ps1, level-match.ps1, ui-tests.js, run-ui-tests.ps1
+tests/                       PresetTests.cpp, OrganTests.cpp, VoiceTests.cpp, CabinetTests.cpp, EngineTools.cpp, HostCheck.cpp,
+                             Parity.cpp, TestRender.h, parity_scenarios.json, parity-runner.js, parity-compare.js, run-parity.ps1,
+                             js-bench.js, check-params.ps1, level-match.ps1, ui-tests.js, web-tests.js, run-ui-tests.ps1,
+                             screenshot-mock.js, screenshots.ps1
 ```
 
 ### Bridge events
@@ -168,6 +200,7 @@ tests/                       PresetTests.cpp, OrganTests.cpp, VoiceTests.cpp, Ca
 | `cabinetModel {model}` (sets the model and loads its defaults) | `rotor {hornAngle,drumAngle,hornHz,drumHz}` (turns, Hz; every tick while it changes) |
 | `loadPreset {id}`, `savePreset {name,overwrite}`, `deletePreset {id}`, `loadPresetFile`, `openPresetFolder`, `paramMenu {id,x,y}` | `presetList {presets,folder}`, `preset {id,name,category}`, `saveResult {ok,exists,name,error}`, `message {text}` |
 | | `stats {peak,sustain,modWheel,expression,motor,perc,speed}`, `config {…}` |
+| *web only:* `selectMidi {id}` | `midiInputs {inputs,selected}` |
 
 The cabinet drawing animates from the `rotor` events: each frame draws the angle extrapolated from the latest report
 with its speed; a disagreeing report becomes an offset that fades out over ~80 ms.
@@ -178,6 +211,10 @@ with its speed; a disagreeing report becomes an offset that fades out over ~80 m
   then loads from disk: edit the HTML/CSS/JS and reopen the plugin window. `HAM_UI_PAGE=voice` (or `drawbars`, `cabinet`,
   `play`, `fx`) opens that page first. `serve.ps1 -Ui` in the repo root previews the UI in a browser without an engine.
 - **DevTools:** Shift + right-click in the plugin window, then *Inspect*.
+- **Web build:** click or tap once to start the audio (browsers require it). Served (`start.bat`) the engine runs in
+  an AudioWorklet; opened from disk it runs on the page's main thread (more latency). Presets stay in the browser until
+  FOLDER links a folder on disk; link `Documents\The Ham\Presets` to share them with the VST. Web MIDI and folder
+  linking need Chrome or Edge.
 - **Blank window:** the WebView2 runtime is missing or blocked. Its data folder is `%TEMP%\TheHamVST-WebView2`;
   deleting it is safe.
 - **A manual is silent:** check its preset key (C = cancel silences it) and the MIDI channels on the PLAY · MIDI page.

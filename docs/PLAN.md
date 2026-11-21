@@ -1,7 +1,41 @@
 # The Ham: build plan
 
-Status (2026-11-18): plan approved. **Phases 1–5 done** (tonewheel core, organ voice, rotary cabinets, animated UI,
-the 50 presets and verification); waiting for hand-testing before phase 6.
+Status (2026-11-20): plan approved. **Phases 1–6 done** (tonewheel core, organ voice, rotary cabinets, animated UI,
+the 50 presets and verification, the web build); the presets and the web build await hand-testing.
+
+Phase 6 notes (2026-11-20):
+- **The web build**: `vst/webhost/` (`dsp-worklet.js`, `factory.js`, `web-host.js`, `build-web.ps1`, `dev.html`) →
+  `web/index.html` and `docs/index.html` (byte-identical, 299 KB). `dsp-worklet.js` is the line-for-line twin of
+  `SynthEngine.h`, `dsp/*.h`, `EngineParamsFromValues.h` and `MidiRouting.h`; nothing allocates while rendering (the
+  contact-event heap is a struct of typed arrays, the ramps and pickups are preallocated objects). The processor's
+  share of the plugin (drawbar CC maps, MIDI learn, keyswitches, the cabinet defaults, the registrations) lives in
+  `web-host.js` on the main thread, as it lives in `PluginProcessor` and not in the engine. The worklet reports the
+  stats, the rotor angles and the keys held about 30 times a second; the host turns them into the editor's `stats`,
+  `rotor` and `notes` events, so `app.js` and `cabinet.js` run unchanged.
+- **Parity** (`tests/Parity.cpp` → `--parity`, `parity-runner.js`, `parity-compare.js`, `run-parity.ps1`,
+  `parity_scenarios.json`): 111 scenarios, 181 s of audio: 61 feature scenarios (every engine path; the list is in
+  vst/README.md) and one phrase per factory preset (both chords and a pedal, the mod wheel up at 0.4 s). Event types:
+  on, off, cc, manual (the on-screen keys), expression, param (a parameter change from a block on), presetKey, motor,
+  speed, midi, allOff, panic. **Worst relative error 4.99·10⁻⁶** on the first run (tolerance 10⁻⁴, Brass Knuckles').
+  The errors cluster near 5·10⁻⁶ where the drive and its level matching are active and near 10⁻⁸ elsewhere: `exp`,
+  `pow` and `log` differ in the last bits between MSVC's CRT and V8, nothing structural. What had to match exactly:
+  the parameters are applied before `prepare()` (as the plugin does), every parameter value is rounded to float
+  (`Math.fround`, the plugin's parameters are floats), and the JS processor applies pending parameter values before
+  every message that touches the engine (the C++ side applies a `param` event at once).
+- **Speed**: the C++ engine renders the scenarios in 6.4 s, the JS engine in headless Edge in 29.4 s (4.6×, with a
+  fresh engine and JIT warm-up per scenario). Steady state in Node (`tests/js-bench.js`): one key **6.6%** of one
+  core, a six-key trio chord 9.5–9.7% on Trio Classic / Full Organ / Grind Comp / Psychedelic Swirl / Bach Plenum,
+  the `--bench` worst case **10.4%** (C++: 3.3% / 4.9%). The generator always runs, so the cost barely depends on
+  the keys down.
+- **UI tests** (`tests/web-tests.js`; `run-ui-tests.ps1` now runs the plugin UI and the web build, from disk and
+  served): 38 checks from disk (ScriptProcessor, Edge's virtual time) and 45 served (AudioWorklet in real time),
+  listed in vst/README.md. The served run includes the cabinet drawing following the engine's own rotor events: the
+  drawn horn spins at 6.69 Hz against the engine's 6.70, within 14° of each report. Reports jitter by an audio
+  buffer (the audio thread renders ahead of the ear in bursts, so a report's angle is a few ms ahead of its arrival)
+  and the drawing smooths that over 80 ms; the plugin-UI test, which feeds events from the page's own clock, tracks
+  to 0.2°.
+- Verification, all passing: `run-parity.ps1` (111 scenarios), `run-ui-tests.ps1` (111 checks: 28 + 38 + 45), the C++
+  suite unchanged (presets, `--organ`, `--voice`, `--cabinet`, renders, loudness).
 
 Fix after phase 4, second round (hand-testing: "the rotary speaker seems always active and is audibly ignorant of
 parameter changes"):
@@ -583,4 +617,4 @@ vst/
 6. **Web build.** `dsp-worklet.js` (line-for-line twin), `web-host.js` (including `rotor` events), `factory.js`,
    `build-web.ps1` (→ `web/index.html` and `docs/index.html`), `start.bat` / `serve.ps1`. Parity scenarios for every
    feature and every preset at Brass Knuckles' tolerance (1e-4). Headless UI tests, including one that feeds rotor
-   events and checks that the drawn horn and drum angles follow them.
+   events and checks that the drawn horn and drum angles follow them. (Done: see the phase 6 notes.)

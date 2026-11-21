@@ -9,7 +9,7 @@ instrument in the family after [E-Piano](https://github.com/BlinkZer0/E-PianoVST
 | Build | Where | Status |
 |---|---|---|
 | **VST3 plugin** + Standalone | [`vst/`](vst/README.md) | phases 1–5: tonewheel generator, drawbars, key click, percussion, scanner vibrato/chorus, expression, leakage, Age, four rotary cabinets, tube amp, outboard pedals, spring reverb, animated cabinet, the full UI and 50 level-matched presets; all automated checks pass |
-| **Web build** | `web/index.html` (also served at https://blinkzer0.github.io/The-Ham/) | phase 6 |
+| **Web build** | [`web/index.html`](web/index.html) (also served at https://blinkzer0.github.io/The-Ham/) | phase 6: one self-contained file with the same UI, a JavaScript twin of the engine (checked against the C++ engine by a parity test: 111 scenarios agree within 5·10⁻⁶), Web MIDI, presets in the browser or a linked folder |
 
 The plan, the phases and the measured results are in [docs/PLAN.md](docs/PLAN.md). The house rules are in
 [docs/CONVENTIONS.md](docs/CONVENTIONS.md).
@@ -117,8 +117,31 @@ built-in spring reverb).
 - **MIDI learn** on every control: LEARN, click a control, move a knob or fader. Right-click in learn mode forgets.
   Learned CCs are saved with the project and stay when you change presets.
 
-### Coming next
-The web build (phase 6): the same engine in the browser, with parity tests against the plugin.
+## Web build
+
+`web/index.html` is the whole instrument in one file (UI, engine, 50 presets; about 300 KB, no downloads). It runs in
+**Chrome or Edge**, and GitHub Pages serves it at https://blinkzer0.github.io/The-Ham/.
+
+```
+start.bat                      serve web/ at http://localhost:8080 and open it (recommended)
+vst\webhost\build-web.ps1      rebuild web/index.html (and docs/index.html) after changing vst/ui, vst/webhost or the presets
+```
+
+- **The engine is a JavaScript twin of the plugin's**: the same 91 wheels, contacts, scanner, cabinets and pedals, line
+  for line. A parity test renders 111 scenarios (every feature, and a phrase on every preset) through both engines and
+  requires them to agree within 10⁻⁴; they agree within 5·10⁻⁶.
+- **Served** (`start.bat`) the engine runs in an **AudioWorklet**, on its own audio thread. **Opened straight from
+  disk** it still works, but browsers block AudioWorklets on `file://`, so the engine runs on the page's main thread
+  through a ScriptProcessor: more latency.
+- Click anywhere once to start the audio (browsers require a click before sound).
+- **MIDI**: Web MIDI, all inputs or one (the **MIDI IN** menu in the header). Everything the plugin understands works
+  the same way: the three channels or Split, drawbar CC maps, expression, the mod wheel on the rotor speed,
+  keyswitches, MIDI learn (the map is kept in the browser).
+- **Presets**: saved in the browser by default. Click **FOLDER** to link a folder on disk instead; link
+  `Documents\The Ham\Presets` and the web build and the VST share the same `.hampreset` files. **LOAD** opens any
+  `.hampreset` file.
+- **CPU** (one core, JavaScript): about 7% for one key and 10% for a trio chord on any preset, 10% with every key held:
+  the generator always runs, so the cost barely depends on how many keys are down. The C++ build uses 3–5%.
 
 ## Build and install
 
@@ -224,7 +247,10 @@ registrations are the commonly published classic settings for each style, as sta
 
 - **Still to confirm by hand** in Minihost Modular: everything in phases 1–5 (see "What to listen for" in
   [docs/PLAN.md](docs/PLAN.md)). The scanner depths, the percussion decay times, the cabinet voicings and the 50
-  registrations in particular need judging by ear.
+  registrations in particular need judging by ear. The web build (phase 6) has only been driven by the headless tests:
+  open `start.bat` in Chrome or Edge and play it.
+- The web build is tested in Edge (Chromium). Web MIDI and preset-folder linking need Chrome or Edge; Safari has no Web
+  MIDI. Other browsers are untested. The JavaScript engine uses about twice the CPU of the C++ one.
 - **"The rotary seems to run all the time"**: that is most likely the **scanner chorus** (VOICE page, VIB SWELL /
   VIB GREAT and V1–C3), not the cabinet. C3 turns at 6.9 Hz and, on a single note, swings the level by about 21 dB,
   more than the rotor itself; the earlier starter presets had it on everywhere. The rotor itself was checked through
@@ -239,7 +265,8 @@ registrations are the commonly published classic settings for each style, as sta
 ## Repository layout
 
 ```
-vst/                      VST3 plugin (JUCE 8): Source/, ui/, presets/, tests/  (webhost/ in phase 6)
-docs/                     CONVENTIONS.md, PLAN.md, screenshots/ (index.html in phase 6)
-start.bat, serve.ps1      local server (serve.ps1 -Ui previews the UI without an engine)
+vst/                      VST3 plugin (JUCE 8): Source/, ui/, presets/, tests/, webhost/ (the JS engine and web host)
+web/index.html            web build (generated by vst/webhost/build-web.ps1; never edited by hand)
+docs/                     CONVENTIONS.md, PLAN.md, screenshots/, index.html (the web build for GitHub Pages, byte-identical)
+start.bat, serve.ps1      local server for the web build (serve.ps1 -Dev: unbundled, straight from the sources; -Ui: the UI alone)
 ```

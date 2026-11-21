@@ -23,6 +23,7 @@ int runOrganTests();
 int runVoiceTests();
 int runCabinetTests();
 int runCabCompare (const juce::File&);
+int runParity (const juce::File&);
 double presetLoudness (const PresetData&);
 
 static void testParamTable()
@@ -255,6 +256,7 @@ int main (int argc, char* argv[])
     if (cmd == "--voice") return runVoiceTests() == 0 ? 0 : 1;
     if (cmd == "--cabinet") return runCabinetTests() == 0 ? 0 : 1;
     if (cmd == "--cab-compare") return runCabCompare (argc >= 3 ? juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]) : juce::File());
+    if (cmd == "--parity" && argc >= 3) return runParity (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]));
 
     PresetManager pm;
     testParamTable();

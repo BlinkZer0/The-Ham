@@ -212,7 +212,17 @@ presets in localStorage or a linked folder. `dsp-worklet.js` is one self-contain
 **line-for-line twin** of `SynthEngine.h` and `dsp/*.h`.
 
 **The Ham:** the output is also copied to `docs/index.html` (section 1). `web-host.js` also emits `rotor` events at
-30 Hz from the worklet's reported rotor state, so `cabinet.js` runs unchanged in both builds.
+30 Hz from the worklet's reported rotor state, so `cabinet.js` runs unchanged in both builds, and `notes` events from
+the keys the engine reports held (as the editor does from `keysDown`). The processor's share of the plugin lives in
+`web-host.js`, not in the worklet: the drawbar CC maps, MIDI learn (the map is kept in localStorage, `ham.midiLearn`),
+the preset keyswitches, the fixed registrations, and a cabinet pick loading the model's 14 defaults (a table the UI
+tests check against the factory cabinet templates). Worklet messages in: `param`, `params`, `registrations`, `midi`,
+`noteOn` / `noteOff` (raw MIDI notes, for the parity runner), `keyOn` / `keyOff` (manual + key), `cc`, `expression`,
+`allNotesOff`, `panic`; out: `stats` (peak, sustain, mod wheel, expression, motor, percussion, speed switch, rotor
+angles and speeds, two key masks per manual) about 30 times a second. The test hook is `window.__hamWebHost` (values,
+regs, factory, current, audioMode, a tap on the messages, `midi()` injection, `loadPresetText()`). Parameter values are
+rounded to float (`Math.fround`) before they reach the engine, and the parameters are applied before `prepare()`, as
+the plugin does; the parity test depends on both.
 
 ## 9. Tests
 
@@ -221,13 +231,16 @@ presets in localStorage or a linked folder. `dsp-worklet.js` is one self-contain
 | `TheHamTests.exe` | parameter table, presets, file round trip, old/partial/garbage files, engine checks |
 | `--dump-params` | C++ parameter table as JSON (diffed by `check-params.ps1`) |
 | `--parity <scenarios.json>` | C++ render of each scenario: RMS per window + peak as JSON |
-| `tests\run-parity.ps1` | the same scenarios in headless Edge through `dsp-worklet.js`, compared per window (tolerance 1e-4, as in Brass Knuckles) |
+| `tests\run-parity.ps1` | the same scenarios in headless Edge through `dsp-worklet.js`, compared per window (tolerance 1e-4, as in Brass Knuckles). **The Ham:** 111 scenarios (61 feature + one per preset), worst 5·10⁻⁶ |
 | `--bench`, `--loudness`, `--render`, `--render-all`, `--host-check` | as in Brass Knuckles |
-| `tests\run-ui-tests.ps1` | the web build in headless Edge, from disk and served. **The Ham:** committed in phase 4 for the plugin UI (mocked bridge, served in real time so requestAnimationFrame runs; checks the cabinet animation against the `rotor` events); phase 6 adds the web build |
+| `tests\run-ui-tests.ps1` | the web build in headless Edge, from disk and served. **The Ham:** committed in phase 4 for the plugin UI (`ui-tests.js`, mocked bridge, served in real time so requestAnimationFrame runs; checks the cabinet animation against the `rotor` events); phase 6 added `web-tests.js` for the web build, from disk (virtual time, DOM dump) and served (real time, results POSTed): 28 + 38 + 45 checks. `-Plugin` / `-Web` run one half |
+| `node tests\js-bench.js` | the JS engine's CPU use in Node (steady state, one core) |
 
 Scenarios: `{ name, preset?, params?, blocks, events: [[block, type, …]] }`.
 
-**The Ham** adds event types `manual` (channel/manual routing), `presetKey`, `motor` and `speed`. It adds organ
+**The Ham** adds event types `manual` (the on-screen keys: manual, key, velocity; 0 = release), `expression` (the
+on-screen pedal), `param` (a parameter change from that block on), `presetKey`, `motor` and `speed` (sugar for
+`param`), and drops `bpm` (no transport). It adds organ
 checks: wheel frequencies, wiring and foldback, percussion triggering, scanner depth order, rotor speed and ramp
 times, the horn leading the drum, clicks on speed changes, aliasing, mono compatibility, and a UI test that the
 cabinet drawing follows the `rotor` events.

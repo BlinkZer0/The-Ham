@@ -1,0 +1,61 @@
+<!doctype html>
+<!--
+  Development page: the web build UNBUNDLED. Loads vst/ui (HTML, CSS, JS), the
+  factory presets and the web host straight from the source files, so an edit
+  only needs a page reload (no build-web.ps1).
+  Open it with:  serve.ps1 -Dev   (serves vst/ and opens this page)
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Ham (dev)</title>
+  <style>body { background: #140c09; color: #e2d4b3; font: 14px system-ui, sans-serif; }</style>
+</head>
+<body>
+  <p id="dev-status">Loading the UI from ../ui …</p>
+  <script>
+  (async function () {
+    'use strict';
+    const status = (t) => { const s = document.getElementById('dev-status'); if (s) s.textContent = t; };
+    try {
+      if (location.protocol === 'file:') throw new Error('open this page through serve.ps1 -Dev (browsers block loading files from file://)');
+      const [indexHtml, factory] = await Promise.all([
+        fetch('../ui/index.html', { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('../ui/index.html: ' + r.status); return r.text(); }),
+        fetch('../presets/factory_presets.json', { cache: 'no-store' }).then(r => r.json()),
+      ]);
+      window.FACTORY_JSON = factory;
+      const doc = new DOMParser().parseFromString(indexHtml, 'text/html');
+      const scripts = [...doc.querySelectorAll('script[src]')].map(s => s.getAttribute('src'));
+      doc.querySelectorAll('script').forEach(s => s.remove());
+      const css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = '../ui/css/style.css';
+      await new Promise((res) => { css.onload = css.onerror = res; document.head.appendChild(css); });
+      document.body.innerHTML = doc.body.innerHTML;
+      for (const a of doc.body.attributes) document.body.setAttribute(a.name, a.value);
+
+      // same order as build-web.ps1: the web host goes in right before the bridge (engine-juce.js)
+      const order = [];
+      for (const src of scripts) {
+        if (src.endsWith('engine-juce.js')) order.push('factory.js', 'dsp-worklet.js', 'web-host.js');
+        order.push('../ui/' + src);
+      }
+      for (const src of order) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = src + '?t=' + Date.now();
+          s.onload = res;
+          s.onerror = () => rej(new Error('could not load ' + src));
+          document.body.appendChild(s);
+        });
+      }
+      document.title = 'The Ham (dev)';
+    } catch (e) {
+      status('Dev page failed: ' + (e.message || e));
+      console.error(e);
+    }
+  })();
+  </script>
+</body>
+</html>
